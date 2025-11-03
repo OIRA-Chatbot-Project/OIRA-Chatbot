@@ -1,8 +1,8 @@
-#from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_chroma import Chroma
 import gradio as gr
-from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
-from langchain_huggingface import HuggingFaceEmbeddings
+# from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
+# from langchain_huggingface import HuggingFaceEmbeddings
 
 # import the .env file
 from dotenv import load_dotenv
@@ -12,21 +12,21 @@ load_dotenv()
 DATA_PATH = r"data"
 CHROMA_PATH = r"chroma_db"
 
-# OpenAI 
-#embeddings_model = OpenAIEmbeddings(model="text-embedding-3-large")
+# OpenAI embeddings (3072 dimensions for text-embedding-3-large)
+embeddings_model = OpenAIEmbeddings(model="text-embedding-3-large")
 
 # Google Gemini 
 # embeddings_model = GoogleGenerativeAIEmbeddings(
 #     model="models/gemini-embedding-001"
 # )
 
-# Option 3: HuggingFace - FREE and open-access (CURRENTLY USED IN DATABASE)
-embeddings_model = HuggingFaceEmbeddings(
-    model_name="sentence-transformers/all-MiniLM-L6-v2"
-)
+# HuggingFace - FREE and open-access 
+# embeddings_model = HuggingFaceEmbeddings(
+#     model_name="sentence-transformers/all-MiniLM-L6-v2"
+# )
 # initiate the model
-#llm = ChatOpenAI(temperature=0.5, model='gpt-4o-mini')
-llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
+llm = ChatOpenAI(temperature=0.5, model='gpt-4o-mini')
+# llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
 
 # connect to the chromadb
 vector_store = Chroma(
@@ -61,10 +61,9 @@ def stream_response(message, history):
         rag_prompt = f"""
         You are an assistant chatbot that helps Bucknell University students find infomation about courses using the school's course catalog.
         While answering, you don't use your internal knowledge, 
-        but solely the information in 'data/2025-2026 course catalog.pdf'. 
+        but solely the information in 'data/2025-2026 course catalog.pdf', NEVER MAKE UP KNOWLEDGE. 
         If you don't know the answer, just say that you don't know and ask the student to consult faculty and staff.
-        You don't mention anything to the user about the provided knowledge.
-        Response should be as detailed as possible.
+        Response should be as detailed as possible. 
 
         The question: {message}
 

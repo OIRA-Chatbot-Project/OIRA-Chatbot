@@ -1,8 +1,8 @@
 from langchain_community.document_loaders import PyPDFDirectoryLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_openai.embeddings import OpenAIEmbeddings
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
-from langchain_huggingface import HuggingFaceEmbeddings
+# from langchain_google_genai import GoogleGenerativeAIEmbeddings
+# from langchain_huggingface import HuggingFaceEmbeddings
 
 from langchain_chroma import Chroma
 from uuid import uuid4
@@ -15,18 +15,18 @@ load_dotenv()
 DATA_PATH = r"data"
 CHROMA_PATH = r"chroma_db"
 
-# OpenAI 
-#embeddings_model = OpenAIEmbeddings(model="text-embedding-3-large")
+# OpenAI embeddings (3072 dimensions for text-embedding-3-large)
+embeddings_model = OpenAIEmbeddings(model="text-embedding-3-large")
 
-# Google Gemini 
+# Google Gemini (alternative)
 # embeddings_model = GoogleGenerativeAIEmbeddings(
 #     model="models/gemini-embedding-001"
 # )
 
-# Option 3: HuggingFace - FREE and open-access (no authentication needed)
-embeddings_model = HuggingFaceEmbeddings(
-    model_name="sentence-transformers/all-MiniLM-L6-v2"
-)
+# HuggingFace - FREE and open-access (384 dimensions, alternative)
+# embeddings_model = HuggingFaceEmbeddings(
+#     model_name="sentence-transformers/all-MiniLM-L6-v2"
+# )
 # initiate the vector store
 vector_store = Chroma(
     collection_name="example_collection",
@@ -54,7 +54,7 @@ chunks = text_splitter.split_documents(raw_documents)
 uuids = [str(uuid4()) for _ in range(len(chunks))]
 
 # adding chunks to vector store in batches to avoid exceeding ChromaDB batch size limit
-BATCH_SIZE = 5000  # Safe batch size for ChromaDB
+BATCH_SIZE = 200  # Safe batch size for ChromaDB
 total_chunks = len(chunks)
 
 print(f"Total chunks to process: {total_chunks}")
