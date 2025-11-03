@@ -3,13 +3,21 @@ Course Catalog Chatbot for Bucknell University
 
 how to run this:
 
-## 1. create a virtual environment: 
+## 1. move to the ```/backend``` folder
+
+```cd backend```
+
+## 2. create a ```.env``` file to store your API key
+
+```OPENAI_API_KEY```
+
+## 3. create a virtual environment: 
 
 ```python -m venv .venv ```
 
-## 2. activate the virtual environment: (look up the command for your specific OS) 
+## 4. activate the virtual environment: (look up the command for your specific OS) 
 
-## 3. run these: 
+## 5. run these: 
 
 ```pip install -r requrirements.txt ```
 
