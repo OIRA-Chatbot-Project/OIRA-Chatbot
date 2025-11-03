@@ -138,3 +138,9 @@ wrapt==1.17.2
 yarl==1.19.0
 zipp==3.21.0
 zstandard==0.23.0
+# Packages found in the active virtual environment but missing from this file
+bokeh==3.8.0
+docarray==0.41.0
+panel==1.8.2
+param==2.2.1
+sentence-transformers==5.1.2
