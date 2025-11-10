@@ -14,6 +14,9 @@ how to run this:
 ## 3. create a virtual environment: 
 
 ```python -m venv .venv ```
+If that doesn't work, try:
+```python3 -m venv .venv ```
+Or check if you already install Python on your system path.
 
 ## 4. activate the virtual environment: (look up the command for your specific OS) 
 

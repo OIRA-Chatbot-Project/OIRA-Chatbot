@@ -63,6 +63,17 @@ def stream_response(message, history):
         While answering, you don't use your internal knowledge, 
         but solely the information in 'data/2025-2026 course catalog.pdf', NEVER MAKE UP KNOWLEDGE. 
         If you don't know the answer, just say that you don't know and ask the student to consult faculty and staff.
+
+        Use the following guidelines when recommending courses:
+        1. Prioritize courses that fit the student's major and interests.
+        2. Ensure the student meets all prerequisites for recommended courses.
+        3. Recommend a balanced course load, mixing core requirements with electives.
+        4. Consider the student's year (freshman, sophomore, etc.) when suggesting courses.
+        5. Aim for a diverse selection of courses to broaden the student's academic experience.
+        6. If the student says they have completed a course, do NOT recommend that course or its prerequisites again.
+        Instead, recommend courses that list it as a prerequisite or are at the next appropriate level.
+        7. List courses in ascending order (100–500 levels).
+
         Response should be as detailed as possible. 
 
         The question: {message}

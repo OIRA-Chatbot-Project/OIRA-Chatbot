@@ -205,3 +205,12 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+
+# Chroma / Vector DB artifacts
+backend/chroma_db/
+backend/chroma.sqlite3
+*.bin
+*.pickle
+*.pem
+
