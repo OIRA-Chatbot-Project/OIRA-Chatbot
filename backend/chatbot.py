@@ -1,102 +1,134 @@
+# chatbot.py
+"""
+Gradio chat UI that answers ONLY from the Bucknell course catalog stored in Chroma.
+- Uses the SAME Chroma collection name as ingestion (bucknell_catalogue)
+- Uses MMR retrieval for more diverse hits
+- Passes chunk headers with [filename, p.X] so the model can cite pages
+- Streams responses for a nice UX
+"""
+
+import os
+from dotenv import load_dotenv
+import gradio as gr
+
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_chroma import Chroma
-import gradio as gr
-# from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
-# from langchain_huggingface import HuggingFaceEmbeddings
 
-# import the .env file
-from dotenv import load_dotenv
 load_dotenv()
 
-# configuration
-DATA_PATH = r"data"
-CHROMA_PATH = r"chroma_db"
+# Paths & names 
+DATA_PATH = "data"
+CHROMA_PATH = "chroma_db"
+COLLECTION = "bucknell_catalogue"  # <-- MUST MATCH ingest_database.py
 
-# OpenAI embeddings (3072 dimensions for text-embedding-3-large)
+#  Embeddings & LLM 
+# Requires OPENAI_API_KEY
 embeddings_model = OpenAIEmbeddings(model="text-embedding-3-large")
 
-# Google Gemini 
-# embeddings_model = GoogleGenerativeAIEmbeddings(
-#     model="models/gemini-embedding-001"
-# )
+# Keep temperature modest; catalog is factual.
+llm = ChatOpenAI(temperature=0.3, model="gpt-4o-mini")
 
-# HuggingFace - FREE and open-access 
-# embeddings_model = HuggingFaceEmbeddings(
-#     model_name="sentence-transformers/all-MiniLM-L6-v2"
-# )
-# initiate the model
-llm = ChatOpenAI(temperature=0.5, model='gpt-4o-mini')
-# llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
-
-# connect to the chromadb
+#  Vector store & retriever 
 vector_store = Chroma(
-    collection_name="example_collection",
+    collection_name=COLLECTION,
     embedding_function=embeddings_model,
-    persist_directory=CHROMA_PATH, 
+    persist_directory=CHROMA_PATH,
 )
 
-# Set up the vectorstore to be the retriever
-num_results = 5
-retriever = vector_store.as_retriever(search_kwargs={'k': num_results})
+# MMR surfaces diverse but relevant chunks; higher fetch_k to broaden the pool
+retriever = vector_store.as_retriever(
+    search_type="mmr",
+    search_kwargs={"k": 8, "fetch_k": 50, "lambda_mult": 0.4},
+)
 
-# call this function for every message added to the chatbot
+def _short_source(path: str) -> str:
+    """Turn a long file path into a friendly filename for citations."""
+    if not path:
+        return "Source"
+    name = os.path.basename(path)
+    return name.replace("_", " ")
+
+def _prepare_knowledge(docs):
+    """
+    Build a labeled context string so the model can cite pages.
+    Each chunk gets a header like:
+    [2025-2026 course catalog.pdf, p. 367]
+    <chunk text>
+    """
+    parts = []
+    for d in docs:
+        meta = d.metadata or {}
+        src = _short_source(meta.get("source", "Catalogue"))
+        # PyPDFDirectoryLoader is 0-based; add 1 for human-friendly
+        page = (meta.get("page", 0) or 0) + 1
+        header = f"[{src}, p. {page}]"
+        parts.append(f"{header}\n{d.page_content.strip()}\n")
+    return "\n".join(parts)
+
 def stream_response(message, history):
-    #print(f"Input: {message}. History: {history}\n")
-
-    # retrieve the relevant chunks based on the question asked
+    """
+    Called for each user turn. Retrieves chunks, builds a strict RAG prompt,
+    and streams back the LLM response.
+    `history` is provided by Gradio; we don’t need it for retrieval itself.
+    """
+    # 1) Retrieve context
     docs = retriever.invoke(message)
+    if not docs:
+        # If nothing retrieved, be transparent and helpful
+        yield ("I couldn’t retrieve relevant catalog sections. "
+               "Please try rephrasing (e.g., include a course code like CSCI 204) "
+               "or check that the PDF is ingested.")
+        return
 
-    # add all the chunks to 'knowledge'
-    knowledge = ""
+    knowledge = _prepare_knowledge(docs)
 
-    for doc in docs:
-        knowledge += doc.page_content+"\n\n"
+    # 2) Build the prompt (single string is fine for streaming)
+    rag_prompt = f"""
+You are the Bucknell University Academic Catalogue Virtual Assistant.
+Answer ONLY using the content below in *Knowledge*. Do NOT use outside knowledge.
+If the answer is not explicitly supported, say you don’t know and suggest contacting an academic advisor.
 
+Rules you MUST follow:
+- Be professional, warm, and student-centered.
+- Use short bullets for lists (requirements, steps, recommended courses).
+- Include page citations by copying the bracket tags from the relevant chunks
+  (e.g., [2025-2026 course catalog.pdf, p. 367]).
+- End with a **References** section listing the citation tags you actually used.
+- Never hallucinate course counts, requirements, or policies.
 
-    # make the call to the LLM (including prompt)
-    if message is not None:
+Course Recommendation Guidance (when applicable):
+- Prioritize courses aligned with the student’s major/concentration/interests.
+- Verify prerequisites before recommending.
+- Recommend a balanced load (major/core + gen ed + electives).
+- Consider student’s year (100-level for first-years, then 200/300 etc.).
+- Don’t suggest courses already completed or their prerequisites; suggest the next level instead.
+- List suggested courses in ascending order (100–500).
 
-        partial_message = ""
+QUESTION:
+{message}
 
-        rag_prompt = f"""
-        You are an assistant chatbot that helps Bucknell University students find infomation about courses using the school's course catalog.
-        While answering, you don't use your internal knowledge, 
-        but solely the information in 'data/2025-2026 course catalog.pdf', NEVER MAKE UP KNOWLEDGE. 
-        If you don't know the answer, just say that you don't know and ask the student to consult faculty and staff.
+KNOWLEDGE (catalog snippets with page tags):
+{knowledge}
+"""
 
-        Use the following guidelines when recommending courses:
-        1. Prioritize courses that fit the student's major and interests.
-        2. Ensure the student meets all prerequisites for recommended courses.
-        3. Recommend a balanced course load, mixing core requirements with electives.
-        4. Consider the student's year (freshman, sophomore, etc.) when suggesting courses.
-        5. Aim for a diverse selection of courses to broaden the student's academic experience.
-        6. If the student says they have completed a course, do NOT recommend that course or its prerequisites again.
-        Instead, recommend courses that list it as a prerequisite or are at the next appropriate level.
-        7. List courses in ascending order (100–500 levels).
+    # 3) Stream back the model output
+    partial = ""
+    for token in llm.stream(rag_prompt):
+        partial += token.content
+        yield partial
 
-        Response should be as detailed as possible. 
-
-        The question: {message}
-
-        Conversation history: {history}
-
-        The knowledge: {knowledge}
-
-        """
-
-        print(rag_prompt)
-
-        # stream the response to the Gradio App
-        for response in llm.stream(rag_prompt):
-            partial_message += response.content
-            yield partial_message
-
-# initiate the Gradio app
-chatbot = gr.ChatInterface(stream_response, textbox=gr.Textbox(placeholder="Send to the LLM...",
-    container=False,
-    autoscroll=True,
-    scale=7),
+#  Gradio UI 
+# The deprecation warning you saw is harmless, but we can ignore it for now.
+chatbot = gr.ChatInterface(
+    fn=stream_response,
+    textbox=gr.Textbox(
+        placeholder="Ask about majors, prerequisites, or course planning…",
+        container=False,
+        autoscroll=True,
+        scale=7,
+    ),
 )
 
-# launch the Gradio app
-chatbot.launch(share=True)
+if __name__ == "__main__":
+    # share=True gives you a temporary public URL for quick demos
+    chatbot.launch(share=True)

@@ -1,70 +1,71 @@
+# ingest_database.py
+"""
+Builds/updates the Chroma vector DB from PDFs in ./data.
+- Uses OpenAI embeddings (text-embedding-3-large)
+- Preserves PDF metadata (source path + page) for later citations
+- Larger chunk size (1200/200) to keep course context together
+"""
+
+from uuid import uuid4
+from dotenv import load_dotenv
 from langchain_community.document_loaders import PyPDFDirectoryLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_openai.embeddings import OpenAIEmbeddings
-# from langchain_google_genai import GoogleGenerativeAIEmbeddings
-# from langchain_huggingface import HuggingFaceEmbeddings
-
 from langchain_chroma import Chroma
-from uuid import uuid4
 
-# import the .env file
-from dotenv import load_dotenv
 load_dotenv()
 
-# configuration
-DATA_PATH = r"data"
-CHROMA_PATH = r"chroma_db"
+# Paths & names 
+DATA_PATH = "data"           # put PDFs here (e.g., "2025-2026 course catalog.pdf")
+CHROMA_PATH = "chroma_db"    # local persisted index directory
+COLLECTION = "bucknell_catalogue"  
 
-# OpenAI embeddings (3072 dimensions for text-embedding-3-large)
+# Embeddings 
+# Requires OPENAI_API_KEY in environment
 embeddings_model = OpenAIEmbeddings(model="text-embedding-3-large")
 
-# Google Gemini (alternative)
-# embeddings_model = GoogleGenerativeAIEmbeddings(
-#     model="models/gemini-embedding-001"
-# )
-
-# HuggingFace - FREE and open-access (384 dimensions, alternative)
-# embeddings_model = HuggingFaceEmbeddings(
-#     model_name="sentence-transformers/all-MiniLM-L6-v2"
-# )
-# initiate the vector store
-vector_store = Chroma(
-    collection_name="example_collection",
-    embedding_function=embeddings_model,
-    persist_directory=CHROMA_PATH,
-)
-
-# loading the PDF document
+#  Load PDFs 
+# PyPDFDirectoryLoader automatically adds metadata:
+#   doc.metadata["source"] == filepath
+#   doc.metadata["page"]   == 0-based page number
 loader = PyPDFDirectoryLoader(DATA_PATH)
-
 raw_documents = loader.load()
 
-# splitting the document
+print(f"Loaded {len(raw_documents)} raw pages from {DATA_PATH}")
+
+#  Split into chunks 
+# Larger chunks so course titles, prerequisites, and rules stay together
 text_splitter = RecursiveCharacterTextSplitter(
-    chunk_size=300,
-    chunk_overlap=100,
+    chunk_size=1200,
+    chunk_overlap=200,
     length_function=len,
     is_separator_regex=False,
 )
 
-# creating the chunks
 chunks = text_splitter.split_documents(raw_documents)
+print(f"Created {len(chunks)} chunks")
 
-# creating unique ID's
+#  Connect to Chroma (persisted) 
+vector_store = Chroma(
+    collection_name=COLLECTION,
+    embedding_function=embeddings_model,
+    persist_directory=CHROMA_PATH,
+)
+
+#  Add in batches 
+BATCH_SIZE = 200
 uuids = [str(uuid4()) for _ in range(len(chunks))]
+total = len(chunks)
+print(f"Total chunks to upsert: {total}")
 
-# adding chunks to vector store in batches to avoid exceeding ChromaDB batch size limit
-BATCH_SIZE = 200  # Safe batch size for ChromaDB
-total_chunks = len(chunks)
+for i in range(0, total, BATCH_SIZE):
+    j = min(i + BATCH_SIZE, total)
+    batch_chunks = chunks[i:j]
+    batch_ids = uuids[i:j]
+    print(f"Adding batch {i//BATCH_SIZE + 1}: chunks {i+1}-{j}")
+    vector_store.add_documents(documents=batch_chunks, ids=batch_ids)
 
-print(f"Total chunks to process: {total_chunks}")
-
-for i in range(0, total_chunks, BATCH_SIZE):
-    batch_end = min(i + BATCH_SIZE, total_chunks)
-    batch_chunks = chunks[i:batch_end]
-    batch_uuids = uuids[i:batch_end]
-    
-    print(f"Processing batch {i//BATCH_SIZE + 1}: chunks {i+1} to {batch_end}")
-    vector_store.add_documents(documents=batch_chunks, ids=batch_uuids)
-
-print(f"Successfully added {total_chunks} chunks to the vector store!")
+# Persist the index safely
+vector_store.persist()
+print(f"✅ Done. Persisted {total} chunks to {CHROMA_PATH} (collection='{COLLECTION}').")
+print("Tip: If you change PDFs significantly, consider deleting the chroma_db folder and re-ingesting.")
