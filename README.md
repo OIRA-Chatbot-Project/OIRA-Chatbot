@@ -40,8 +40,6 @@ OIRA-Chatbot/
 │   ├── package.json
 │   └── README.md
 ├── start.sh             # Startup script (Unix)
-├── start.bat            # Startup script (Windows)
-└── start.py             # Startup script (cross-platform)
 ```
 
 ## 🛠️ Manual Setup
