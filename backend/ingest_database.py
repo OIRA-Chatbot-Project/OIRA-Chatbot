@@ -65,7 +65,6 @@ for i in range(0, total, BATCH_SIZE):
     print(f"Adding batch {i//BATCH_SIZE + 1}: chunks {i+1}-{j}")
     vector_store.add_documents(documents=batch_chunks, ids=batch_ids)
 
-# Persist the index safely
-vector_store.persist()
-print(f"✅ Done. Persisted {total} chunks to {CHROMA_PATH} (collection='{COLLECTION}').")
+# ChromaDB auto-persists when using persist_directory
+print(f"✅ Done. Added {total} chunks to {CHROMA_PATH} (collection='{COLLECTION}').")
 print("Tip: If you change PDFs significantly, consider deleting the chroma_db folder and re-ingesting.")
