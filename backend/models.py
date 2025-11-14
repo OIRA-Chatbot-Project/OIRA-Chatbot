@@ -34,6 +34,20 @@ class ChatResponse(BaseModel):
     session_id: str = Field(..., description="Session identifier")
 
 
+class ParsedCourse(BaseModel):
+    """Parsed course entry extracted from a schedule image/text"""
+    course_code: str
+    term: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class ScheduleUploadResponse(ChatResponse):
+    """Response model for schedule uploads"""
+    schedule_summary: str = Field(..., description="Human-readable summary of detected courses")
+    parsed_courses: List[ParsedCourse] = Field(default_factory=list, description="Structured parsed courses")
+    schedule_message_id: int = Field(..., description="Message ID of the stored schedule summary")
+
+
 class FeedbackResponse(BaseModel):
     """Response model for /feedback endpoint"""
     success: bool = Field(..., description="Whether feedback was recorded successfully")

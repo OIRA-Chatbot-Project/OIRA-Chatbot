@@ -115,7 +115,6 @@ Rules you MUST follow:
 - Use short bullets for lists (requirements, steps, recommended courses).
 - Include page citations by copying the bracket tags from the relevant chunks
   (e.g., [2025-2026 course catalog.pdf, p. 367]).
-- End with a **References** section listing the citation tags you actually used.
 - Never hallucinate course counts, requirements, or policies.
 
 Course Recommendation Guidance (when applicable):
@@ -139,6 +138,19 @@ KNOWLEDGE (catalog snippets with page tags):
         answer = response.content
         
         return answer, citations
+
+    def recommend_courses_from_schedule(self, schedule_summary: str, conversation_history: List[Dict[str, str]]) -> Tuple[str, List[Dict]]:
+        """
+        Provide course recommendations using a student's prior schedule summary.
+        """
+        question = (
+            "A student shared their previously completed courses and experiences:\n"
+            f"{schedule_summary}\n\n"
+            "Using the Bucknell course catalog, recommend 4-6 thoughtful next courses that build on this plan. "
+            "Group suggestions by category when possible (Major requirements, Core/Electives, Exploratory). "
+            "Consider prerequisites and avoid recommending courses that appear to already be completed."
+        )
+        return self.get_answer(question, conversation_history)
 
 
 # Global instance

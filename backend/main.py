@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from typing import List
@@ -11,9 +11,10 @@ from models import (
     ChatRequest, ChatResponse, Citation,
     FeedbackRequest, FeedbackResponse,
     MessagesResponse, MessageResponse,
-    HealthResponse
+    HealthResponse, ScheduleUploadResponse, ParsedCourse
 )
 from chatbot_service import chatbot_service
+from schedule_parser import extract_text_from_upload, parse_schedule_entries, summarize_schedule
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -120,6 +121,94 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error processing chat: {str(e)}")
+
+
+@app.post("/schedule/upload", response_model=ScheduleUploadResponse)
+async def upload_schedule(
+    session_id: str = Form(...),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    """
+    Accept a screenshot/text export of a student's past schedule, extract the courses,
+    and provide tailored recommendations.
+    """
+    try:
+        session = db.query(DBSession).filter(DBSession.session_id == session_id).first()
+        if not session:
+            session = DBSession(session_id=session_id)
+            db.add(session)
+            db.commit()
+        else:
+            session.updated_at = datetime.utcnow()
+            db.commit()
+
+        contents = await file.read()
+        if not contents:
+            raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+
+        try:
+            raw_text = extract_text_from_upload(contents, file.filename)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+        parsed_courses = parse_schedule_entries(raw_text)
+        if not parsed_courses:
+            raise HTTPException(
+                status_code=400,
+                detail="Could not detect any courses in the uploaded schedule. Please try a clearer image or a text export."
+            )
+        summary = summarize_schedule(parsed_courses)
+
+        # Save schedule summary as a user message
+        user_message = DBMessage(
+            session_id=session_id,
+            role="user",
+            content=f"Schedule uploaded:\n{summary}"
+        )
+        db.add(user_message)
+        db.commit()
+        db.refresh(user_message)
+
+        # Build conversation history for context
+        history_messages = db.query(DBMessage).filter(
+            DBMessage.session_id == session_id,
+            DBMessage.id < user_message.id
+        ).order_by(DBMessage.created_at.desc()).limit(6).all()
+
+        conversation_history = [
+            {"role": msg.role, "content": msg.content}
+            for msg in reversed(history_messages)
+        ]
+
+        answer, citations = chatbot_service.recommend_courses_from_schedule(summary, conversation_history)
+
+        assistant_message = DBMessage(
+            session_id=session_id,
+            role="assistant",
+            content=answer,
+            citations=json.dumps(citations)
+        )
+        db.add(assistant_message)
+        db.commit()
+        db.refresh(assistant_message)
+
+        citation_objects = [Citation(**c) for c in citations]
+
+        return ScheduleUploadResponse(
+            message_id=assistant_message.id,
+            answer=answer,
+            citations=citation_objects,
+            session_id=session_id,
+            schedule_summary=summary,
+            parsed_courses=[ParsedCourse(**course) for course in parsed_courses],
+            schedule_message_id=user_message.id
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error processing schedule: {str(e)}")
 
 
 @app.post("/feedback", response_model=FeedbackResponse)

@@ -93,7 +93,6 @@ Rules you MUST follow:
 - Use short bullets for lists (requirements, steps, recommended courses).
 - Include page citations by copying the bracket tags from the relevant chunks
   (e.g., [2025-2026 course catalog.pdf, p. 367]).
-- End with a **References** section listing the citation tags you actually used.
 - Never hallucinate course counts, requirements, or policies.
 
 Course Recommendation Guidance (when applicable):

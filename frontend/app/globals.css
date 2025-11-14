@@ -18,12 +18,15 @@
 
 body {
   color: rgb(var(--foreground-rgb));
-  background: linear-gradient(
-      to bottom,
-      transparent,
-      rgb(var(--background-end-rgb))
-    )
-    rgb(var(--background-start-rgb));
+  background: radial-gradient(circle at top, #fdfbff 0%, #f3f4f7 40%, #e9ecf3 100%);
+  font-family: 'Inter', 'SF Pro Display', 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  min-height: 100vh;
+  transition: background 0.3s ease, color 0.3s ease;
+}
+
+body[data-theme='dark'] {
+  background: radial-gradient(circle at 20% 20%, #1f2a44, #0f172a 60%, #050910 100%);
+  color: #f8fafc;
 }
 
 /* Custom scrollbar */
@@ -42,6 +45,22 @@ body {
 
 .scrollbar-thin::-webkit-scrollbar-thumb:hover {
   background: #555;
+}
+
+body[data-theme='dark'] .scrollbar-thin::-webkit-scrollbar-track {
+  background: #0f172a;
+}
+
+body[data-theme='dark'] .scrollbar-thin::-webkit-scrollbar-thumb {
+  background: #475569;
+}
+
+body[data-theme='dark'] .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
+* {
+  transition: color 0.25s ease, background-color 0.25s ease, border-color 0.25s ease;
 }
 
 /* Markdown styling for chat messages */
@@ -81,4 +100,16 @@ body {
   font-weight: 600;
   margin-top: 0.75rem;
   margin-bottom: 0.5rem;
+}
+
+.markdown-content a {
+  color: #E87722;
+  text-decoration: underline;
+}
+
+.markdown-content code {
+  background-color: #f3f4f6;
+  border-radius: 4px;
+  padding: 0.15rem 0.35rem;
+  font-size: 0.85em;
 }

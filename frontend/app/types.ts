@@ -24,3 +24,24 @@ export interface MessagesResponse {
   session_id: string
   messages: Message[]
 }
+
+export type Theme = 'light' | 'dark'
+
+export interface SessionSummary {
+  id: string
+  timestamp: number
+  title?: string
+  hasMessages?: boolean
+}
+
+export interface ParsedCourse {
+  course_code: string
+  term?: string
+  notes?: string
+}
+
+export interface ScheduleUploadResponse extends ChatResponse {
+  schedule_summary: string
+  parsed_courses: ParsedCourse[]
+  schedule_message_id: number
+}
