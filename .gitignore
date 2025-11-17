@@ -215,3 +215,4 @@ backend/chroma.sqlite3
 *.pickle
 *.pem
 
+backend/chatbot.db
