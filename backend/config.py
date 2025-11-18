@@ -21,7 +21,7 @@ CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "300"))
 CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "100"))
 
 # ChromaDB Configuration
-CHROMA_COLLECTION_NAME = os.getenv("CHROMA_COLLECTION_NAME", "example_collection")
+CHROMA_COLLECTION_NAME = os.getenv("CHROMA_COLLECTION_NAME", "bucknell_catalogue")
 
 # API Configuration
 API_VERSION = "1.0.0"

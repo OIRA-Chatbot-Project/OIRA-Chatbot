@@ -216,3 +216,4 @@ backend/chroma.sqlite3
 *.pem
 
 backend/chatbot.db
+bash.exe.stackdump
