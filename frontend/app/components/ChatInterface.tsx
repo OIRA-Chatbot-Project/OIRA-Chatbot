@@ -186,10 +186,14 @@ export default function ChatInterface({
       try {
         payload = await response.json()
       } catch {
-        payload = { detail: undefined } as ScheduleUploadResponse
+        payload = { detail: undefined }
       }
       if (!response.ok) {
-        throw new Error(payload?.detail || 'Failed to process schedule')
+        let detail: string | undefined
+        if (payload && typeof payload === 'object' && 'detail' in payload) {
+          detail = (payload as { detail?: string }).detail
+        }
+        throw new Error(detail || 'Failed to process schedule')
       }
 
       const data = payload as ScheduleUploadResponse
@@ -214,7 +218,15 @@ export default function ChatInterface({
       setUploadError(null)
     } catch (err) {
       console.error('Failed to upload schedule:', err)
-      setUploadError('Failed to analyze the schedule. Please try again with a clearer image or text export.')
+      const fallback =
+        'Failed to analyze the schedule. Please try again with a clearer image or text export.'
+      if (err instanceof Error && err.message) {
+        setUploadError(err.message)
+      } else if (typeof err === 'string' && err.trim().length > 0) {
+        setUploadError(err)
+      } else {
+        setUploadError(fallback)
+      }
     } finally {
       setIsUploadingSchedule(false)
       if (fileInputRef.current) {

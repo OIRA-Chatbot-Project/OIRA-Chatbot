@@ -3,7 +3,7 @@ import os
 import re
 from typing import List, Dict
 
-from PIL import Image
+from PIL import Image, ImageEnhance, ImageFilter, ImageOps
 
 try:
     import pytesseract
@@ -14,7 +14,10 @@ except Exception:  # pragma: no cover - fallback when pytesseract missing
 SUPPORTED_IMAGE_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.bmp', '.tiff', '.tif', '.gif'}
 SUPPORTED_TEXT_EXTENSIONS = {'.txt', '.csv'}
 
-COURSE_PATTERN = re.compile(r'(?P<code>[A-Z]{2,4}\s?\d{3})', re.IGNORECASE)
+COURSE_PATTERN = re.compile(
+    r'(?P<prefix>[A-Z]{2,4})[\s\-]*?(?P<number>\d{3}[A-Z]?)',
+    re.IGNORECASE
+)
 TERM_PATTERN = re.compile(r'(Fall|Spring|Summer|Winter)\s*(\d{2,4})?', re.IGNORECASE)
 
 
@@ -37,7 +40,14 @@ def extract_text_from_upload(content: bytes, filename: str) -> str:
                 "and ensure the Tesseract OCR binary is available on your system PATH."
             )
         image = Image.open(io.BytesIO(content))
-        text = pytesseract.image_to_string(image)
+        processed = _prepare_image_for_ocr(image)
+        text = pytesseract.image_to_string(processed, lang='eng', config='--psm 6')
+        text = text.strip()
+        if not text:
+            raise ValueError(
+                "Could not read any text from the uploaded image. "
+                "Try a clearer screenshot or export your schedule as text/CSV."
+            )
         return text
 
     raise ValueError(
@@ -62,8 +72,9 @@ def parse_schedule_entries(raw_text: str) -> List[Dict[str, str]]:
         if not course_match:
             continue
 
-        course_code = course_match.group('code').upper().replace(' ', '')
-        course_code = f"{course_code[:-3]} {course_code[-3:]}"
+        prefix = course_match.group('prefix').upper()
+        number = course_match.group('number').upper().replace('-', '')
+        course_code = f"{prefix} {number}"
 
         term_match = TERM_PATTERN.search(cleaned)
         term = None
@@ -96,3 +107,32 @@ def summarize_schedule(entries: List[Dict[str, str]]) -> str:
             detail = f"{detail} — {entry['notes']}"
         lines.append(f"- {detail}")
     return "\n".join(lines)
+
+
+def _prepare_image_for_ocr(image: Image.Image) -> Image.Image:
+    """
+    Enhance uploaded images to improve OCR accuracy.
+    """
+    image = ImageOps.exif_transpose(image)
+    if image.mode not in ("L", "RGB"):
+        image = image.convert("RGB")
+    grayscale = ImageOps.grayscale(image)
+    contrasted = ImageOps.autocontrast(grayscale)
+    enhancer = ImageEnhance.Contrast(contrasted)
+    contrasted = enhancer.enhance(1.8)
+
+    width, height = contrasted.size
+    max_dim = max(width, height)
+    scale = 1
+    if max_dim < 1200:
+        scale = 2
+    elif max_dim < 2000:
+        scale = 1.5
+    if scale != 1:
+        contrasted = contrasted.resize(
+            (int(width * scale), int(height * scale)),
+            Image.Resampling.LANCZOS
+        )
+
+    sharpened = contrasted.filter(ImageFilter.SHARPEN)
+    return sharpened

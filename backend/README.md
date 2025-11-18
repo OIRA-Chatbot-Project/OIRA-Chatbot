@@ -17,6 +17,16 @@ FastAPI backend for the Bucknell University course catalog chatbot.
 pip install -r requirements.txt
 ```
 
+#### Schedule OCR requirement
+
+Screenshot uploads for the schedule assistant depend on the Tesseract OCR binary. Install it on your system before uploading PNG/JPG files:
+
+- **macOS:** `brew install tesseract`
+- **Ubuntu/Debian:** `sudo apt-get update && sudo apt-get install -y tesseract-ocr`
+- **Windows:** Use the [UB Mannheim installer](https://github.com/UB-Mannheim/tesseract/wiki) and add the install directory to your `PATH`.
+
+If Tesseract is missing you will only be able to ingest plain text/CSV schedules.
+
 ### 2. Configure Environment Variables
 
 Create or update `.env` file with your OpenAI API key:

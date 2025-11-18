@@ -29,6 +29,16 @@ Your FastAPI backend is now fully implemented with the following components:
 pip install -r requirements.txt
 ```
 
+#### Schedule OCR requirement
+
+Uploading screenshots of schedules relies on the Tesseract OCR binary in addition to the Python packages above. Install it once on your system:
+
+- **macOS:** `brew install tesseract`
+- **Ubuntu/Debian:** `sudo apt-get update && sudo apt-get install -y tesseract-ocr`
+- **Windows:** Download the installer from [UB Mannheim builds](https://github.com/UB-Mannheim/tesseract/wiki) and add the installation folder to your `PATH`.
+
+Without Tesseract the backend cannot read PNG/JPG uploads and schedule parsing will fail.
+
 ### Step 2: Verify Setup
 
 ```bash
