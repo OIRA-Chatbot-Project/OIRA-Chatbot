@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form
+import re
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from typing import List
@@ -98,10 +99,20 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
         answer, citations = chatbot_service.get_answer(request.message, conversation_history)
         
         # Log assistant's response
+        # Remove inline bracket citations like "[filename, p. 123]" from the answer
+        try:
+            cleaned_answer = re.sub(r"\[[^\]]+?,\s*p\.\s*\d+\]", "", answer)
+            # collapse multiple spaces/newlines that may have been left behind
+            cleaned_answer = re.sub(r"\n{2,}", "\n\n", cleaned_answer)
+            cleaned_answer = re.sub(r"\s{2,}", " ", cleaned_answer)
+            cleaned_answer = cleaned_answer.strip()
+        except Exception:
+            cleaned_answer = answer
+
         assistant_message = DBMessage(
             session_id=request.session_id,
-            role="assistant",
-            content=answer,
+            role='assistant',
+            content=cleaned_answer,
             citations=json.dumps(citations)  # Store citations as JSON string
         )
         db.add(assistant_message)
@@ -183,10 +194,19 @@ async def upload_schedule(
 
         answer, citations = chatbot_service.recommend_courses_from_schedule(summary, conversation_history)
 
+        # Strip inline bracket citations from schedule-upload responses as well
+        try:
+            cleaned_answer = re.sub(r"\[[^\]]+?,\s*p\.\s*\d+\]", "", answer)
+            cleaned_answer = re.sub(r"\n{2,}", "\n\n", cleaned_answer)
+            cleaned_answer = re.sub(r"\s{2,}", " ", cleaned_answer)
+            cleaned_answer = cleaned_answer.strip()
+        except Exception:
+            cleaned_answer = answer
+
         assistant_message = DBMessage(
             session_id=session_id,
-            role="assistant",
-            content=answer,
+            role='assistant',
+            content=cleaned_answer,
             citations=json.dumps(citations)
         )
         db.add(assistant_message)
