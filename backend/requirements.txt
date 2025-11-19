@@ -3,6 +3,10 @@ fastapi==0.115.12
 uvicorn[standard]==0.34.1
 python-multipart==0.0.20
 
+# Authentication
+PyJWT==2.8.0
+cryptography==41.0.7
+
 # Database
 SQLAlchemy==2.0.40
 

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
+import { UserButton, useUser } from '@clerk/nextjs'
 import Image from 'next/image'
 import { SessionSummary, Theme } from '../types'
 import { API_URL } from '../utils/config'
@@ -25,6 +26,7 @@ export default function Sidebar({
   theme,
   disableNewChat = false,
 }: SidebarProps) {
+  const { user } = useUser()
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
@@ -346,15 +348,25 @@ export default function Sidebar({
               />
             </div>
           </div>
-          <button
-            onClick={() => setIsCollapsed(true)}
-            className={`transition-colors ${
-              theme === 'dark' ? 'text-gray-500 hover:text-white' : 'text-gray-400 hover:text-gray-700'
-            }`}
-            title="Collapse sidebar"
-          >
-            ◀
-          </button>
+          <div className="flex items-center gap-2">
+            <UserButton 
+              afterSignOutUrl="/sign-in"
+              appearance={{
+                elements: {
+                  avatarBox: "w-8 h-8"
+                }
+              }}
+            />
+            <button
+              onClick={() => setIsCollapsed(true)}
+              className={`transition-colors ${
+                theme === 'dark' ? 'text-gray-500 hover:text-white' : 'text-gray-400 hover:text-gray-700'
+              }`}
+              title="Collapse sidebar"
+            >
+              ◀
+            </button>
+          </div>
         </div>
         <div className="flex gap-2 mt-2">
           <button

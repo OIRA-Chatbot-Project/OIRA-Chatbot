@@ -3,6 +3,23 @@ from typing import List, Optional
 from datetime import datetime
 
 
+# User Models
+class UserCreate(BaseModel):
+    """Request model for creating/retrieving a user"""
+    clerk_user_id: str = Field(..., description="Clerk user ID")
+    email: str = Field(..., description="User email")
+    name: Optional[str] = Field(None, description="User name")
+
+
+class UserResponse(BaseModel):
+    """Response model for user data"""
+    id: int = Field(..., description="Internal user ID")
+    clerk_user_id: str = Field(..., description="Clerk user ID")
+    email: str = Field(..., description="User email")
+    name: Optional[str] = Field(None, description="User name")
+    created_at: datetime = Field(..., description="When the user was created")
+
+
 # Request Models
 class ChatRequest(BaseModel):
     """Request model for /chat endpoint"""
@@ -67,6 +84,18 @@ class MessagesResponse(BaseModel):
     """Response model for /messages endpoint"""
     session_id: str = Field(..., description="Session identifier")
     messages: List[MessageResponse] = Field(default_factory=list, description="List of messages in the session")
+
+
+class SessionInfo(BaseModel):
+    """Session information"""
+    session_id: str = Field(..., description="Session identifier")
+    created_at: datetime = Field(..., description="When the session was created")
+    updated_at: datetime = Field(..., description="When the session was last updated")
+
+
+class SessionsResponse(BaseModel):
+    """Response model for /sessions endpoint"""
+    sessions: List[SessionInfo] = Field(default_factory=list, description="List of user sessions")
 
 
 class HealthResponse(BaseModel):

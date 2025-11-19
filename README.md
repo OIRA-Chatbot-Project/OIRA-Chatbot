@@ -25,7 +25,7 @@ This will start both the backend API server and frontend UI automatically!
 - **Node.js 18+** (for frontend)
 - **OpenAI API Key** (configured in `backend/.env`)
 
-## 📁 Project Structure
+## 📁 Project Structure (general)
 
 ```
 OIRA-Chatbot/
@@ -38,7 +38,8 @@ OIRA-Chatbot/
 ├── frontend/            # Next.js frontend
 │   ├── app/
 │   ├── package.json
-│   └── README.md
+│   |── README.md
+|   |__ middleware.ts
 ├── start.sh             # Startup script (Unix)
 ```
 
@@ -53,10 +54,8 @@ If you prefer to run backend and frontend separately:
    cd backend
    ```
 
-2. Create `.env` file with your OpenAI API key:
-   ```env
-   OPENAI_API_KEY=your-api-key-here
-   ```
+2. Create `.env` file and follow `.env.example` to fill it out
+
 
 3. Create virtual environment:
    ```bash
@@ -84,13 +83,14 @@ If you prefer to run backend and frontend separately:
    ```bash
    cd frontend
    ```
+2. Create a `.env` file and follow `.env.example` to fill it out
 
-2. Install dependencies:
+3. Install dependencies:
    ```bash
    npm install
    ```
 
-3. Start development server:
+4. Start development server:
    ```bash
    npm run dev
    ```
@@ -104,12 +104,6 @@ If you prefer to run backend and frontend separately:
 - 🔍 ChromaDB vector search with MMR retrieval
 - 🤖 OpenAI GPT-4o-mini integration
 
-## 📖 Documentation
-
-- [Backend Documentation](backend/README.md)
-- [Frontend Documentation](frontend/README.md)
-- [Architecture Overview](backend/ARCHITECTURE.md)
-- [Quick Start Guide](backend/QUICKSTART.md)
 
 ## 🧪 Testing
 
@@ -124,21 +118,6 @@ python test_api.py
 ```bash
 cd backend
 python view_database.py
-```
-
-## 🔧 Configuration
-
-Edit `backend/.env`:
-```env
-OPENAI_API_KEY=your-key-here
-OPENAI_MODEL=gpt-4o-mini
-DATABASE_URL=sqlite:///./chatbot.db
-CHROMA_COLLECTION_NAME=bucknell_catalogue
-```
-
-Edit `frontend/.env.local`:
-```env
-NEXT_PUBLIC_API_URL=http://localhost:8000
 ```
 
 ## 📝 License

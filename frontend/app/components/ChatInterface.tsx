@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, ChangeEvent } from 'react'
+import { useAuth } from '@clerk/nextjs'
 import MessageList from './MessageList'
 import MessageInput from './MessageInput'
 import { Message, Theme, ScheduleUploadResponse } from '../types'
@@ -22,6 +23,7 @@ export default function ChatInterface({
   theme,
   onToggleTheme,
 }: ChatInterfaceProps) {
+  const { getToken } = useAuth()
   const [messages, setMessages] = useState<Message[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -52,7 +54,17 @@ export default function ChatInterface({
 
   const loadConversationHistory = async () => {
     try {
-      const response = await fetch(`${API_URL}/messages?session_id=${sessionId}`)
+      const token = await getToken()
+      if (!token) {
+        setError('Authentication required')
+        return
+      }
+
+      const response = await fetch(`${API_URL}/messages?session_id=${sessionId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      })
       if (response.ok) {
         const data = await response.json()
         setMessages(data.messages)
@@ -97,10 +109,18 @@ export default function ChatInterface({
     }
 
     try {
+      const token = await getToken()
+      if (!token) {
+        setError('Authentication required')
+        setIsLoading(false)
+        return
+      }
+
       const response = await fetch(`${API_URL}/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
           session_id: sessionId,
@@ -133,10 +153,17 @@ export default function ChatInterface({
 
   const submitFeedback = async (messageId: number, rating: number, note?: string) => {
     try {
+      const token = await getToken()
+      if (!token) {
+        console.error('Authentication required for feedback')
+        return
+      }
+
       const response = await fetch(`${API_URL}/feedback`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
           session_id: sessionId,
@@ -173,12 +200,22 @@ export default function ChatInterface({
     setUploadError(null)
 
     try {
+      const token = await getToken()
+      if (!token) {
+        setUploadError('Authentication required')
+        setIsUploadingSchedule(false)
+        return
+      }
+
       const formData = new FormData()
       formData.append('session_id', sessionId)
       formData.append('file', file)
 
       const response = await fetch(`${API_URL}/schedule/upload`, {
         method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
         body: formData,
       })
 

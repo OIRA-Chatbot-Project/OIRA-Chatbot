@@ -6,15 +6,17 @@ import json
 from datetime import datetime
 
 import config
-from database import get_db, init_db, Session as DBSession, Message as DBMessage, Feedback as DBFeedback
+from database import get_db, init_db, Session as DBSession, Message as DBMessage, Feedback as DBFeedback, User as DBUser
 from models import (
     ChatRequest, ChatResponse, Citation,
     FeedbackRequest, FeedbackResponse,
     MessagesResponse, MessageResponse,
-    HealthResponse, ScheduleUploadResponse, ParsedCourse
+    HealthResponse, ScheduleUploadResponse, ParsedCourse,
+    UserCreate, UserResponse, SessionInfo, SessionsResponse
 )
 from chatbot_service import chatbot_service
 from schedule_parser import extract_text_from_upload, parse_schedule_entries, summarize_schedule
+from auth import get_current_user, get_user_id_from_token
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -49,8 +51,78 @@ async def root():
     )
 
 
+@app.post("/users", response_model=UserResponse)
+async def create_or_get_user(
+    user_data: UserCreate,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Create a new user or retrieve existing user
+    
+    - Checks if user already exists by clerk_user_id
+    - Creates new user if doesn't exist
+    - Returns user information
+    """
+    try:
+        # Verify the user making request matches the user being created
+        clerk_user_id = get_user_id_from_token(current_user)
+        if clerk_user_id != user_data.clerk_user_id:
+            raise HTTPException(status_code=403, detail="Cannot create user for different clerk_user_id")
+        
+        # Check if user already exists
+        existing_user = db.query(DBUser).filter(
+            DBUser.clerk_user_id == user_data.clerk_user_id
+        ).first()
+        
+        if existing_user:
+            # Update user info if changed
+            if user_data.email != existing_user.email or user_data.name != existing_user.name:
+                existing_user.email = user_data.email
+                existing_user.name = user_data.name
+                existing_user.updated_at = datetime.utcnow()
+                db.commit()
+                db.refresh(existing_user)
+            
+            return UserResponse(
+                id=existing_user.id,
+                clerk_user_id=existing_user.clerk_user_id,
+                email=existing_user.email,
+                name=existing_user.name,
+                created_at=existing_user.created_at
+            )
+        
+        # Create new user
+        new_user = DBUser(
+            clerk_user_id=user_data.clerk_user_id,
+            email=user_data.email,
+            name=user_data.name
+        )
+        db.add(new_user)
+        db.commit()
+        db.refresh(new_user)
+        
+        return UserResponse(
+            id=new_user.id,
+            clerk_user_id=new_user.clerk_user_id,
+            email=new_user.email,
+            name=new_user.name,
+            created_at=new_user.created_at
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error creating/retrieving user: {str(e)}")
+
+
 @app.post("/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest, db: Session = Depends(get_db)):
+async def chat(
+    request: ChatRequest,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     """
     Process a chat message and return an answer with citations
     
@@ -62,13 +134,24 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
     - Returns the answer and message ID
     """
     try:
-        # Ensure session exists
+        # Get user ID from token
+        clerk_user_id = get_user_id_from_token(current_user)
+        
+        # Get or create user in database
+        user = db.query(DBUser).filter(DBUser.clerk_user_id == clerk_user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found. Please sign up first.")
+        
+        # Ensure session exists and belongs to user
         session = db.query(DBSession).filter(DBSession.session_id == request.session_id).first()
         if not session:
-            session = DBSession(session_id=request.session_id)
+            session = DBSession(session_id=request.session_id, user_id=user.id)
             db.add(session)
             db.commit()
         else:
+            # Verify session belongs to user
+            if session.user_id != user.id:
+                raise HTTPException(status_code=403, detail="Session does not belong to user")
             # Update session timestamp
             session.updated_at = datetime.utcnow()
             db.commit()
@@ -127,6 +210,7 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
 async def upload_schedule(
     session_id: str = Form(...),
     file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
@@ -134,12 +218,23 @@ async def upload_schedule(
     and provide tailored recommendations.
     """
     try:
+        # Get user ID from token
+        clerk_user_id = get_user_id_from_token(current_user)
+        
+        # Get user from database
+        user = db.query(DBUser).filter(DBUser.clerk_user_id == clerk_user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found. Please sign up first.")
+        
         session = db.query(DBSession).filter(DBSession.session_id == session_id).first()
         if not session:
-            session = DBSession(session_id=session_id)
+            session = DBSession(session_id=session_id, user_id=user.id)
             db.add(session)
             db.commit()
         else:
+            # Verify session belongs to user
+            if session.user_id != user.id:
+                raise HTTPException(status_code=403, detail="Session does not belong to user")
             session.updated_at = datetime.utcnow()
             db.commit()
 
@@ -212,7 +307,11 @@ async def upload_schedule(
 
 
 @app.post("/feedback", response_model=FeedbackResponse)
-async def submit_feedback(request: FeedbackRequest, db: Session = Depends(get_db)):
+async def submit_feedback(
+    request: FeedbackRequest,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     """
     Submit feedback for an assistant message
     
@@ -221,6 +320,23 @@ async def submit_feedback(request: FeedbackRequest, db: Session = Depends(get_db
     - Stores feedback in database for analytics
     """
     try:
+        # Get user ID from token
+        clerk_user_id = get_user_id_from_token(current_user)
+        
+        # Get user from database
+        user = db.query(DBUser).filter(DBUser.clerk_user_id == clerk_user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Verify session belongs to user
+        session = db.query(DBSession).filter(
+            DBSession.session_id == request.session_id,
+            DBSession.user_id == user.id
+        ).first()
+        
+        if not session:
+            raise HTTPException(status_code=403, detail="Session does not belong to user")
+        
         # Validate that the message exists and belongs to the session
         message = db.query(DBMessage).filter(
             DBMessage.id == request.message_id,
@@ -265,7 +381,11 @@ async def submit_feedback(request: FeedbackRequest, db: Session = Depends(get_db
 
 
 @app.get("/messages", response_model=MessagesResponse)
-async def get_messages(session_id: str, db: Session = Depends(get_db)):
+async def get_messages(
+    session_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     """
     Retrieve all messages for a given session
     
@@ -274,10 +394,22 @@ async def get_messages(session_id: str, db: Session = Depends(get_db)):
     - Used to restore chat history when user returns
     """
     try:
-        # Verify session exists
-        session = db.query(DBSession).filter(DBSession.session_id == session_id).first()
+        # Get user ID from token
+        clerk_user_id = get_user_id_from_token(current_user)
+        
+        # Get user from database
+        user = db.query(DBUser).filter(DBUser.clerk_user_id == clerk_user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Verify session exists and belongs to user
+        session = db.query(DBSession).filter(
+            DBSession.session_id == session_id,
+            DBSession.user_id == user.id
+        ).first()
+        
         if not session:
-            # Return empty history for non-existent sessions (not an error)
+            # Return empty history for non-existent or unauthorized sessions
             return MessagesResponse(
                 session_id=session_id,
                 messages=[]
@@ -314,6 +446,48 @@ async def get_messages(session_id: str, db: Session = Depends(get_db)):
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error retrieving messages: {str(e)}")
+
+
+@app.get("/sessions", response_model=SessionsResponse)
+async def get_user_sessions(
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Retrieve all sessions for the authenticated user
+    
+    - Returns list of sessions with metadata
+    - Used to display session history/switcher
+    """
+    try:
+        # Get user ID from token
+        clerk_user_id = get_user_id_from_token(current_user)
+        
+        # Get user from database
+        user = db.query(DBUser).filter(DBUser.clerk_user_id == clerk_user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Get all sessions for the user
+        sessions = db.query(DBSession).filter(
+            DBSession.user_id == user.id
+        ).order_by(DBSession.updated_at.desc()).all()
+        
+        session_infos = [
+            SessionInfo(
+                session_id=s.session_id,
+                created_at=s.created_at,
+                updated_at=s.updated_at
+            )
+            for s in sessions
+        ]
+        
+        return SessionsResponse(sessions=session_infos)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error retrieving sessions: {str(e)}")
 
 
 # Optional: Admin endpoint for triggering re-ingestion

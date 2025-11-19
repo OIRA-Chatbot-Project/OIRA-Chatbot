@@ -1,6 +1,6 @@
-from sqlalchemy import create_engine, Column, String, Integer, DateTime, Text, Float
+from sqlalchemy import create_engine, Column, String, Integer, DateTime, Text, Float, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, relationship
 from datetime import datetime
 import os
 
@@ -20,13 +20,33 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
 
+class User(Base):
+    """Represents a user authenticated via Clerk"""
+    __tablename__ = "users"
+    
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    clerk_user_id = Column(String, unique=True, index=True, nullable=False)
+    email = Column(String, nullable=False)
+    name = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    sessions = relationship("Session", back_populates="user")
+
+
 class Session(Base):
     """Represents a chat session"""
     __tablename__ = "sessions"
     
     session_id = Column(String, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    user = relationship("User", back_populates="sessions")
+    messages = relationship("Message", back_populates="session")
 
 
 class Message(Base):
@@ -34,11 +54,14 @@ class Message(Base):
     __tablename__ = "messages"
     
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    session_id = Column(String, index=True, nullable=False)
+    session_id = Column(String, ForeignKey("sessions.session_id"), index=True, nullable=False)
     role = Column(String, nullable=False)  # 'user' or 'assistant'
     content = Column(Text, nullable=False)
     citations = Column(Text, nullable=True)  # JSON string of citations
     created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    session = relationship("Session", back_populates="messages")
 
 
 class Feedback(Base):
