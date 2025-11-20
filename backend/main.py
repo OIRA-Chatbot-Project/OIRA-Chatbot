@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from typing import List
 import json
 from datetime import datetime
@@ -80,7 +81,7 @@ async def create_or_get_user(
             if user_data.email != existing_user.email or user_data.name != existing_user.name:
                 existing_user.email = user_data.email
                 existing_user.name = user_data.name
-                existing_user.updated_at = datetime.utcnow()
+                existing_user.updated_at = datetime.now(datetime.UTC) if hasattr(datetime, 'UTC') else datetime.utcnow()
                 db.commit()
                 db.refresh(existing_user)
             
@@ -153,7 +154,7 @@ async def chat(
             if session.user_id != user.id:
                 raise HTTPException(status_code=403, detail="Session does not belong to user")
             # Update session timestamp
-            session.updated_at = datetime.utcnow()
+            session.updated_at = datetime.now(datetime.UTC) if hasattr(datetime, 'UTC') else datetime.utcnow()
             db.commit()
         
         # Log user's message
@@ -203,7 +204,60 @@ async def chat(
         
     except Exception as e:
         db.rollback()
+        print(f"ERROR in /chat endpoint: {str(e)}")
+        print(f"Error type: {type(e).__name__}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error processing chat: {str(e)}")
+
+
+@app.get("/sessions")
+async def get_sessions(
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get all sessions for the current user (lightweight, without messages)
+    """
+    try:
+        # Get user ID from token
+        clerk_user_id = get_user_id_from_token(current_user)
+        
+        # Get user from database
+        user = db.query(DBUser).filter(DBUser.clerk_user_id == clerk_user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Get all sessions with message counts (optimized query)
+        sessions = db.query(
+            DBSession.session_id,
+            DBSession.created_at,
+            func.count(DBMessage.id).label('message_count')
+        ).outerjoin(
+            DBMessage, DBMessage.session_id == DBSession.session_id
+        ).filter(
+            DBSession.user_id == user.id
+        ).group_by(
+            DBSession.session_id, DBSession.created_at
+        ).order_by(
+            DBSession.updated_at.desc()
+        ).all()
+        
+        return {
+            "sessions": [
+                {
+                    "session_id": s.session_id,
+                    "created_at": s.created_at.isoformat(),
+                    "has_messages": s.message_count > 0
+                }
+                for s in sessions
+            ]
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching sessions: {str(e)}")
 
 
 @app.post("/schedule/upload", response_model=ScheduleUploadResponse)
@@ -235,7 +289,7 @@ async def upload_schedule(
             # Verify session belongs to user
             if session.user_id != user.id:
                 raise HTTPException(status_code=403, detail="Session does not belong to user")
-            session.updated_at = datetime.utcnow()
+            session.updated_at = datetime.now(datetime.UTC) if hasattr(datetime, 'UTC') else datetime.utcnow()
             db.commit()
 
         contents = await file.read()

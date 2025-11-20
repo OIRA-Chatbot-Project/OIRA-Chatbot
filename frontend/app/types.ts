@@ -30,8 +30,9 @@ export type Theme = 'light' | 'dark'
 export interface SessionSummary {
   id: string
   timestamp: number
-  title?: string
-  hasMessages?: boolean
+  title: string
+  hasMessages: boolean
+  isTemporary?: boolean
 }
 
 export interface ParsedCourse {

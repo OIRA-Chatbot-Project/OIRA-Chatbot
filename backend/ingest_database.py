@@ -12,17 +12,18 @@ from langchain_community.document_loaders import PyPDFDirectoryLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_openai.embeddings import OpenAIEmbeddings
 from langchain_chroma import Chroma
+import config
 
 load_dotenv()
 
 # Paths & names 
-DATA_PATH = "data"           # put PDFs here (e.g., "2025-2026 course catalog.pdf")
-CHROMA_PATH = "chroma_db"    # local persisted index directory
-COLLECTION = "bucknell_catalogue"  
+DATA_PATH = config.DATA_PATH
+CHROMA_PATH = config.CHROMA_PATH
+COLLECTION = config.CHROMA_COLLECTION_NAME
 
 # Embeddings 
 # Requires OPENAI_API_KEY in environment
-embeddings_model = OpenAIEmbeddings(model="text-embedding-3-large")
+embeddings_model = OpenAIEmbeddings(model=config.EMBEDDING_MODEL)
 
 #  Load PDFs 
 # PyPDFDirectoryLoader automatically adds metadata:

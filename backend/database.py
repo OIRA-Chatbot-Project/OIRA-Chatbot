@@ -7,10 +7,20 @@ import os
 # Database configuration
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./chatbot.db")
 
-# Create engine
+# Create engine with optimizations
+connect_args = {}
+if DATABASE_URL.startswith("sqlite"):
+    connect_args = {
+        "check_same_thread": False,
+        "timeout": 30,  # 30 second timeout for locked database
+    }
+
 engine = create_engine(
     DATABASE_URL,
-    connect_args={"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
+    connect_args=connect_args,
+    pool_pre_ping=True,  # Verify connections before using
+    pool_size=10,  # Connection pool size
+    max_overflow=20,  # Allow up to 20 extra connections
 )
 
 # Create session factory
@@ -41,8 +51,8 @@ class Session(Base):
     
     session_id = Column(String, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(datetime.UTC) if hasattr(datetime, 'UTC') else datetime.utcnow())
+    updated_at = Column(DateTime, default=lambda: datetime.now(datetime.UTC) if hasattr(datetime, 'UTC') else datetime.utcnow(), onupdate=lambda: datetime.now(datetime.UTC) if hasattr(datetime, 'UTC') else datetime.utcnow())
     
     # Relationships
     user = relationship("User", back_populates="sessions")
