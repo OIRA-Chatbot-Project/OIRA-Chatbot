@@ -137,7 +137,7 @@ KNOWLEDGE (catalog snippets with page tags):
         response = self.llm.invoke(rag_prompt)
         answer = response.content
         
-        return answer, citations
+        return answer, citations # type: ignore
 
     def recommend_courses_from_schedule(self, schedule_summary: str, conversation_history: List[Dict[str, str]]) -> Tuple[str, List[Dict]]:
         """
