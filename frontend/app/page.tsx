@@ -110,21 +110,29 @@ export default function Home() {
     [persistSessions, sessionId, startNewChat]
   );
 
-  // Load user sessions from backend
+  // Load user sessions from backend - only after user is initialized
   useEffect(() => {
-    if (!isLoaded || !isSignedIn || !user || isInitialized) return;
+    if (!isLoaded || !isSignedIn || !user || !isInitialized) return;
 
     let isMounted = true;
 
     const initializeSessions = async () => {
-      const result = await loadUserSessions(startNewChat);
+      try {
+        const result = await loadUserSessions(startNewChat);
 
-      if (result.createTemporary && isMounted) {
-        // No existing sessions - create a temporary one
-        startNewChat();
-      } else if (result.shouldContinue && result.sessions && isMounted) {
-        // Hydrate titles in background without blocking
-        hydrateSessionTitles(result.sessions, () => isMounted);
+        if (result.createTemporary && isMounted) {
+          // No existing sessions - create a temporary one
+          startNewChat();
+        } else if (result.shouldContinue && result.sessions && isMounted) {
+          // Hydrate titles in background without blocking
+          hydrateSessionTitles(result.sessions, () => isMounted);
+        }
+      } catch (error) {
+        console.error("Failed to initialize sessions:", error);
+        // Create temporary session on error
+        if (isMounted) {
+          startNewChat();
+        }
       }
     };
 
@@ -145,6 +153,8 @@ export default function Home() {
 
   // Initialize user in backend
   useEffect(() => {
+    if (isInitialized) return; // Prevent multiple initialization attempts
+
     async function initializeUser() {
       if (!isLoaded || !isSignedIn || !user) return;
 
@@ -152,7 +162,10 @@ export default function Home() {
 
       try {
         const token = await getToken();
-        if (!token) return;
+        if (!token) {
+          console.error("Failed to get authentication token");
+          return;
+        }
 
         const success = await initializeUserInBackend(
           token,
@@ -165,15 +178,17 @@ export default function Home() {
           setIsInitialized(true);
         }
       } catch (error) {
-        // Silently handle initialization errors
+        console.error("Failed to initialize user:", error);
+        // Still set initialized to prevent infinite retry
+        setIsInitialized(true);
       }
     }
 
     initializeUser();
-  }, [isLoaded, isSignedIn, user, getToken]);
+  }, [isLoaded, isSignedIn, user, getToken, isInitialized]);
 
   // Loading state
-  if (!isLoaded) {
+  if (!isLoaded || (isSignedIn && !isInitialized)) {
     return (
       <div className="flex h-screen items-center justify-center">
         <div className="text-lg">Loading...</div>
