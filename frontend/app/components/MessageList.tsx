@@ -7,9 +7,11 @@ interface MessageListProps {
   messages: Message[]
   onFeedback: (messageId: number, rating: number, note?: string) => void
   theme: Theme
+  animationEnabled?: boolean
+  animateMessageId?: number
 }
 
-export default function MessageList({ messages, onFeedback, theme }: MessageListProps) {
+export default function MessageList({ messages, onFeedback, theme, animationEnabled, animateMessageId }: MessageListProps) {
   return (
     <div className="space-y-6">
       {messages.map((message) => (
@@ -18,6 +20,8 @@ export default function MessageList({ messages, onFeedback, theme }: MessageList
           message={message}
           onFeedback={onFeedback}
           theme={theme}
+          animationEnabled={!!animationEnabled}
+          animate={animateMessageId === message.id}
         />
       ))}
     </div>

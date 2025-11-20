@@ -29,6 +29,14 @@ export default function ChatInterface({
   const [error, setError] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const [showSettings, setShowSettings] = useState(false)
+  const [animationEnabled, setAnimationEnabled] = useState<boolean>(() => {
+    try {
+      const v = localStorage.getItem('word_animation_enabled')
+      return v === null ? true : v === 'true'
+    } catch {
+      return true
+    }
+  })
   const [isUploadingSchedule, setIsUploadingSchedule] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -300,7 +308,7 @@ export default function ChatInterface({
               theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
             }`}
           >
-            Modern answers powered by your catalog, presented in a focused workspace.
+
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -397,6 +405,30 @@ export default function ChatInterface({
                 />
               </button>
             </div>
+            <div className="mt-4 flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-semibold">Playback</h3>
+                <p className="text-xs text-gray-500">Show responses word-by-word.</p>
+              </div>
+              <button
+                onClick={() => {
+                  setAnimationEnabled(prev => {
+                    const next = !prev
+                    try { localStorage.setItem('word_animation_enabled', String(next)) } catch {}
+                    return next
+                  })
+                }}
+                className={`relative inline-flex h-7 w-14 items-center rounded-full transition-colors ${
+                  animationEnabled ? 'bg-indigo-500/60' : 'bg-gray-300'
+                }`}
+              >
+                <span
+                  className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-lg transition-transform ${
+                    animationEnabled ? 'translate-x-7' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
           </div>
         </>
       )}
@@ -445,6 +477,11 @@ export default function ChatInterface({
           messages={messages}
           onFeedback={submitFeedback}
           theme={theme}
+          animationEnabled={animationEnabled}
+          animateMessageId={(() => {
+            const last = [...messages].reverse().find(m => m.role === 'assistant')
+            return last ? last.id : undefined
+          })()}
         />
         
         {isLoading && (
