@@ -20,23 +20,20 @@ export default function RootLayout({
     <ClerkProvider>
       <html lang="en" suppressHydrationWarning>
         <head>
-          <Script
-            id="extension-blocker"
-            strategy="beforeInteractive"
-            dangerouslySetInnerHTML={{
-              __html: `
-                // Prevent extension errors from breaking the app
+          <Script id="extension-blocker" strategy="beforeInteractive">
+            {`
+              (function() {
                 window.addEventListener('error', function(e) {
-                  if (e.filename && e.filename.includes('chrome-extension://')) {
+                  if (e.filename && e.filename.indexOf('chrome-extension://') !== -1) {
                     e.preventDefault();
                     e.stopPropagation();
                     console.warn('Extension error blocked:', e.message);
                     return false;
                   }
-                });
-              `,
-            }}
-          />
+                }, true);
+              })();
+            `}
+          </Script>
         </head>
         <body className={inter.className} suppressHydrationWarning>
           {children}
