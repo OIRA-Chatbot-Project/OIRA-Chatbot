@@ -124,6 +124,7 @@ Course Recommendation Guidance (when applicable):
 - Consider student's year (100-level for first-years, then 200/300 etc.).
 - Don't suggest courses already completed or their prerequisites; suggest the next level instead.
 - List suggested courses in ascending order (100–500).
+- If you see course names adjacent to numbers, treat numbers under a ‘Credits’ column as credits, not part of the course name
 
 QUESTION:
 {question}

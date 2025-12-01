@@ -43,7 +43,13 @@ cd backend
 # Check if Python virtual environment exists
 if [ -d ".venv" ]; then
     echo -e "${GREEN}✓ Found Python virtual environment${NC}"
-    source .venv/Scripts/activate 2>/dev/null || source .venv/bin/activate 2>/dev/null
+    if [ -f ".venv/bin/activate" ]; then
+        source .venv/bin/activate
+    elif [ -f ".venv/Scripts/activate" ]; then
+        source .venv/Scripts/activate
+    else
+        echo -e "${YELLOW}⚠ Could not find activate script inside .venv${NC}"
+    fi
 else
     echo -e "${YELLOW}⚠ No virtual environment found. Using system Python.${NC}"
 fi
