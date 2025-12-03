@@ -51,6 +51,7 @@ class Session(Base):
     
     session_id = Column(String, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    title = Column(String, nullable=True)  # AI-generated title
     created_at = Column(DateTime, default=lambda: datetime.now(datetime.UTC) if hasattr(datetime, 'UTC') else datetime.utcnow()) #type: ignore
     updated_at = Column(DateTime, default=lambda: datetime.now(datetime.UTC) if hasattr(datetime, 'UTC') else datetime.utcnow(), onupdate=lambda: datetime.now(datetime.UTC) if hasattr(datetime, 'UTC') else datetime.utcnow()) #type: ignore
     

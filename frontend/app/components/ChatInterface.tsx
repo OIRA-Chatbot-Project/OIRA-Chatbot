@@ -93,10 +93,40 @@ export default function ChatInterface({
     }
   }
 
-  const notifySessionTitle = (content: string) => {
+  const notifySessionTitle = async (content: string) => {
     if (!content) return
-    const title = generateSessionTitle(content)
-    onSessionTitleUpdate?.(sessionId, title)
+    
+    try {
+      // Call backend to generate AI-powered title
+      const token = await getToken()
+      if (!token) return
+      
+      const response = await fetch(`${API_URL}/sessions/generate-title`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          session_id: sessionId,
+          first_message: content
+        })
+      })
+      
+      if (response.ok) {
+        const data = await response.json()
+        onSessionTitleUpdate?.(sessionId, data.title)
+      } else {
+        // Fallback to simple title generation
+        const title = generateSessionTitle(content)
+        onSessionTitleUpdate?.(sessionId, title)
+      }
+    } catch (error) {
+      console.error('Failed to generate AI title, using fallback:', error)
+      // Fallback to simple title generation
+      const title = generateSessionTitle(content)
+      onSessionTitleUpdate?.(sessionId, title)
+    }
   }
 
   const sendMessage = async (content: string) => {
@@ -111,10 +141,7 @@ export default function ChatInterface({
     setIsLoading(true)
     setError(null)
     const hasExistingUserMessage = messages.some(msg => msg.role === 'user')
-    if (!hasExistingUserMessage) {
-      notifySessionTitle(content)
-      onSessionHasMessages?.(sessionId)
-    }
+    const isFirstMessage = !hasExistingUserMessage
 
     try {
       const token = await getToken()
@@ -151,6 +178,12 @@ export default function ChatInterface({
         created_at: new Date().toISOString(),
       }
       setMessages(prev => [...prev, assistantMessage])
+      
+      // Only save session after successful first exchange
+      if (isFirstMessage) {
+        notifySessionTitle(content)
+        onSessionHasMessages?.(sessionId)
+      }
     } catch (err) {
       setError('Failed to get response. Please try again.')
       console.error('Error sending message:', err)
@@ -281,35 +314,24 @@ export default function ChatInterface({
   }
 
   return (
-    <div
-      className={`relative flex flex-col h-full w-full ${
-        theme === 'dark' ? 'text-gray-100' : 'text-gray-900'
-      }`}
-    >
+    <>
       {/* Header */}
       <header
-        className={`px-8 py-6 border-b flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between ${
+        className={`px-4 sm:px-6 md:px-8 py-4 border-b flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between flex-shrink-0 ${
           theme === 'dark'
             ? 'border-slate-800/80 bg-gradient-to-r from-slate-950/80 to-slate-900/50'
             : 'border-white/70 bg-white/60'
         }`}
       >
-        <div>
-          <p className="text-xs uppercase tracking-[0.4em] text-primary">Bucknell</p>
+        <div className="min-w-0">
+          <p className="text-xs uppercase tracking-[0.3em] text-primary">Bucknell</p>
           <h1
-            className={`text-3xl font-semibold ${
+            className={`text-2xl sm:text-3xl font-semibold ${
               theme === 'dark' ? 'text-white' : 'text-secondary'
             }`}
           >
             Course Catalog Assistant
           </h1>
-          <p
-            className={`text-sm mt-2 ${
-              theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
-            }`}
-          >
-
-          </p>
         </div>
         <div className="flex items-center gap-3">
           <span
@@ -362,7 +384,7 @@ export default function ChatInterface({
 
       {uploadError && (
         <div
-          className={`mx-8 mt-4 rounded-2xl border px-4 py-3 text-sm ${
+          className={`mx-4 sm:mx-6 md:mx-8 mt-3 rounded-2xl border px-4 py-2.5 text-sm flex-shrink-0 ${
             theme === 'dark'
               ? 'border-red-400/40 bg-red-500/10 text-red-100'
               : 'border-red-200 bg-red-50 text-red-700'
@@ -381,7 +403,7 @@ export default function ChatInterface({
             aria-hidden="true"
           ></div>
           <div
-            className={`absolute right-8 top-28 z-20 w-72 rounded-3xl border shadow-2xl p-5 ${
+            className={`absolute right-4 sm:right-6 md:right-8 top-24 z-20 w-72 rounded-3xl border shadow-2xl p-5 ${
               theme === 'dark'
                 ? 'bg-slate-900/95 border-slate-700 text-gray-100'
                 : 'bg-white/95 border-white/80 text-gray-900'
@@ -435,23 +457,23 @@ export default function ChatInterface({
 
       {/* Messages */}
       <div
-        className={`flex-1 overflow-y-auto px-6 sm:px-10 py-8 scrollbar-thin ${
+        className={`flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 md:px-8 lg:px-10 py-4 sm:py-6 scrollbar-thin ${
           theme === 'dark'
             ? 'bg-gradient-to-b from-transparent via-slate-950/20 to-slate-950/60'
             : 'bg-gradient-to-b from-white/60 to-slate-50'
         }`}
       >
         {messages.length === 0 && !isLoading && (
-          <div className="flex flex-col items-center justify-center h-full text-center">
-            <div className="max-w-md">
+          <div className="flex flex-col items-center justify-center min-h-full text-center py-8">
+            <div className="max-w-lg px-4">
               <h2
-                className={`text-xl font-semibold mb-3 ${
+                className={`text-xl sm:text-2xl font-semibold mb-3 ${
                   theme === 'dark' ? 'text-gray-100' : 'text-gray-700'
                 }`}
               >
                 Welcome to the Bucknell Course Catalog Assistant! 👋
               </h2>
-              <p className={`mb-4 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+              <p className={`mb-4 text-sm sm:text-base ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
                 I can help you find information about courses, majors, prerequisites, and academic planning.
               </p>
               <div
@@ -526,7 +548,7 @@ export default function ChatInterface({
 
       {/* Input */}
       <div
-        className={`border-t px-6 sm:px-10 py-5 backdrop-blur ${
+        className={`border-t px-4 sm:px-6 md:px-8 lg:px-10 py-4 backdrop-blur flex-shrink-0 ${
           theme === 'dark'
             ? 'bg-slate-950/80 border-slate-800/80'
             : 'bg-white/70 border-white/80'
@@ -534,6 +556,6 @@ export default function ChatInterface({
       >
         <MessageInput onSend={sendMessage} disabled={isLoading} theme={theme} />
       </div>
-    </div>
+    </>
   )
 }

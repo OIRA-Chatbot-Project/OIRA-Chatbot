@@ -89,8 +89,10 @@ class MessagesResponse(BaseModel):
 class SessionInfo(BaseModel):
     """Session information"""
     session_id: str = Field(..., description="Session identifier")
+    title: Optional[str] = Field(None, description="AI-generated session title")
     created_at: datetime = Field(..., description="When the session was created")
     updated_at: datetime = Field(..., description="When the session was last updated")
+    has_messages: bool = Field(default=False, description="Whether the session has any messages")
 
 
 class SessionsResponse(BaseModel):

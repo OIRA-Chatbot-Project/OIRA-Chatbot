@@ -155,7 +155,7 @@ export default function MessageItem({ message, onFeedback, theme, animationEnabl
                 : 'bg-white/90 text-gray-900 shadow-lg shadow-gray-200/60 border border-white/70'
           }`}
         >
-          <div className={`markdown-content ${isUser ? 'text-white' : 'text-gray-900'}`}>
+          <div className={`markdown-content ${isUser ? 'text-white' : theme === 'dark' ? 'text-gray-100' : 'text-gray-900'}`}>
             {shouldAnimate && !animationComplete ? (
               <div className="animated-text whitespace-pre-wrap">
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>

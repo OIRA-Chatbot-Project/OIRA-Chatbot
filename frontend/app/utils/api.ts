@@ -3,6 +3,7 @@ import { MessagesResponse } from '../types'
 
 export interface BackendSession {
   session_id: string
+  title?: string | null
   created_at: string
   has_messages: boolean
 }

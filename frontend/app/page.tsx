@@ -9,6 +9,7 @@ import { SessionSummary, Theme } from "./types";
 import { DEFAULT_SESSION_TITLE } from "./utils/session";
 import {
   saveCurrentSessionId,
+  loadCurrentSessionId,
   clearLegacyStorage,
 } from "./utils/sessionStorage";
 import { initializeUserInBackend } from "./utils/api";
@@ -118,14 +119,43 @@ export default function Home() {
 
     const initializeSessions = async () => {
       try {
-        const result = await loadUserSessions(startNewChat);
+        // Load existing sessions from backend
+        const result = await loadUserSessions();
 
-        if (result.createTemporary && isMounted) {
-          // No existing sessions - create a temporary one
-          startNewChat();
-        } else if (result.shouldContinue && result.sessions && isMounted) {
+        if (result.shouldContinue && result.sessions && isMounted) {
           // Hydrate titles in background without blocking
           hydrateSessionTitles(result.sessions, () => isMounted);
+        }
+        
+        // Check if this is a fresh access or a reload
+        // sessionStorage persists during page reloads but not new tabs/windows
+        const hasActiveSession = sessionStorage.getItem('hasActiveSession');
+        
+        if (!hasActiveSession) {
+          // First access in this tab - create new temporary chat
+          if (isMounted) {
+            startNewChat();
+            sessionStorage.setItem('hasActiveSession', 'true');
+          }
+        } else if (result.shouldContinue && result.sessions && result.sessions.length > 0) {
+          // Reload - restore the last active session
+          const savedSessionId = user?.id ? loadCurrentSessionId(user.id) : null;
+          const activeSessionId = 
+            savedSessionId && result.sessions.find(s => s.id === savedSessionId)
+              ? savedSessionId
+              : result.sessions[0].id;
+          
+          if (isMounted) {
+            setSessionId(activeSessionId);
+            if (user?.id) {
+              saveCurrentSessionId(user.id, activeSessionId);
+            }
+          }
+        } else {
+          // Reload but no existing sessions - create temporary
+          if (isMounted) {
+            startNewChat();
+          }
         }
       } catch (error) {
         console.error("Failed to initialize sessions:", error);
@@ -149,6 +179,7 @@ export default function Home() {
     loadUserSessions,
     hydrateSessionTitles,
     startNewChat,
+    setSessionId,
   ]);
 
   // Initialize user in backend
@@ -218,19 +249,17 @@ export default function Home() {
         theme={theme}
         disableNewChat={isCreatingSession}
       />
-      <main className="flex-1 flex flex-col overflow-hidden">
-        <div className="flex-1 flex justify-center px-4 sm:px-6 lg:px-10 py-6 overflow-hidden">
-          {sessionId && (
-            <ChatInterface
-              key={sessionId}
-              sessionId={sessionId}
-              onSessionTitleUpdate={updateSessionTitle}
-              onSessionHasMessages={markSessionHasMessages}
-              theme={theme}
-              onToggleTheme={toggleTheme}
-            />
-          )}
-        </div>
+      <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        {sessionId && (
+          <ChatInterface
+            key={sessionId}
+            sessionId={sessionId}
+            onSessionTitleUpdate={updateSessionTitle}
+            onSessionHasMessages={markSessionHasMessages}
+            theme={theme}
+            onToggleTheme={toggleTheme}
+          />
+        )}
       </main>
     </div>
   );
