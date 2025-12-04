@@ -105,22 +105,22 @@ export const useSessionManager = (
   )
 
   const loadUserSessions = useCallback(
-    async (startNewChatFallback: () => void) => {
+    async () => {
       try {
         const token = await getToken()
         if (!token) return { shouldContinue: false }
 
         const backendSessions = await fetchUserSessions(token)
         
+        // Backend now only returns sessions with messages
         if (backendSessions.length === 0) {
-          // Create a temporary session instead of calling fallback
-          return { shouldContinue: false, createTemporary: true }
+          return { shouldContinue: false }
         }
 
         const formattedSessions = backendSessions.map(s => ({
           id: s.session_id,
           timestamp: new Date(s.created_at).getTime(),
-          title: DEFAULT_SESSION_TITLE,
+          title: s.title || DEFAULT_SESSION_TITLE,
           hasMessages: s.has_messages,
         }))
 
@@ -129,21 +129,9 @@ export const useSessionManager = (
           saveSessionsToStorage(userId, formattedSessions)
         }
 
-        const savedSessionId = userId ? loadCurrentSessionId(userId) : null
-        const activeSessionId = 
-          savedSessionId && formattedSessions.find(s => s.id === savedSessionId)
-            ? savedSessionId
-            : formattedSessions[0].id
-
-        setSessionId(activeSessionId)
-        if (userId) {
-          saveCurrentSessionId(userId, activeSessionId)
-        }
-
         return { shouldContinue: true, sessions: formattedSessions }
       } catch (error) {
-        // On error, create a temporary session
-        return { shouldContinue: false, createTemporary: true }
+        return { shouldContinue: false }
       }
     },
     [getToken, userId]

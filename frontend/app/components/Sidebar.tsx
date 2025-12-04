@@ -415,7 +415,7 @@ export default function Sidebar({
           sessions.map((session) => (
             <div
               key={session.id}
-              className={`group relative rounded-2xl p-4 cursor-pointer transition-all border backdrop-blur ${
+              className={`group relative rounded-2xl p-2 cursor-pointer transition-all border backdrop-blur ${
                 session.id === currentSessionId
                   ? theme === 'dark'
                     ? 'bg-gradient-to-r from-slate-900 to-slate-800 border-indigo-500/40 shadow-lg shadow-indigo-900/40'
@@ -427,16 +427,16 @@ export default function Sidebar({
               onClick={() => onSelectSession(session.id)}
             >
               <div className="flex items-start justify-between">
-                <div className="flex-1 min-w-0">
+                <div className="flex-1 min-w-0 pr-2">
                   <p
-                    className={`text-sm font-medium truncate ${
+                    className={`text-sm font-medium line-clamp-2 break-words leading-snug ${
                       theme === 'dark' ? 'text-white' : 'text-slate-800'
                     }`}
                     title={session.title || 'New Chat'}
                   >
                     {session.title || 'New Chat'}
                   </p>
-                  <p className={`text-xs mt-1 ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>
+                  <p className={`text-xs mt-1.5 ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>
                     {formatDate(session.timestamp)}
                   </p>
                 </div>

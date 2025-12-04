@@ -147,9 +147,7 @@ NEXT_PUBLIC_API_URL=http://your-backend-url:8000
 
 ## Next Steps
 
-- Add user authentication
 - Implement chat export functionality
-- Add dark mode support
 - Mobile app version
 - Advanced search filters
 - Multi-language support
