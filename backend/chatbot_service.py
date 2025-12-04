@@ -347,9 +347,11 @@ STANDALONE QUESTION:"""
             page = (meta.get("page", 0) or 0) + 1
             
             citation = {
-                "content": doc.page_content[:200] + "..." if len(doc.page_content) > 200 else doc.page_content,
-                "source": src,
-                "page": page
+                    "content": doc.page_content[:200] + "..." if len(doc.page_content) > 200 else doc.page_content,
+                    "source": src,
+                    "page": page,
+                    "url": f"http://localhost:3000/catalog.pdf#page={page}"
+     
             }
             citations.append(citation)
         

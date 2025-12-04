@@ -1,18 +1,20 @@
-import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
+import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 
-// Define public routes that don't require authentication
 const isPublicRoute = createRouteMatcher([
-  '/sign-in(.*)',
-  '/sign-up(.*)',
-])
+  "/sign-in(.*)",
+  "/sign-up(.*)",
+  "/catalog.pdf",            // allow direct PDF access
+]);
 
-export default clerkMiddleware((auth, request) => {
-  // Protect all routes except public ones
-  if (!isPublicRoute(request)) {
-    auth().protect()
+export default clerkMiddleware((auth, req) => {
+  if (!isPublicRoute(req)) {
+    auth().protect();
   }
-})
+});
 
+// MUCH SAFER MATCHER — avoids breaking `/`
 export const config = {
-  matcher: ['/((?!.+\\.[\\w]+$|_next).*)', '/', '/(api|trpc)(.*)'],
-}
+  matcher: [
+    "/((?!_next|.*\\..*|favicon.ico).*)",
+  ],
+};
