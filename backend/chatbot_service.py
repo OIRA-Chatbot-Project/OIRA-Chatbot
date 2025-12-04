@@ -126,6 +126,17 @@ Course Recommendation Guidance (when applicable):
 - List suggested courses in ascending order (100–500).
 - If you see course names adjacent to numbers, treat numbers under a ‘Credits’ column as credits, not part of the course name
 
+The answer should be well-structured and easy to read, with subheadings and bullet points as appropriate. 
+Subsection should be indented under main headings.
+Whenever recommending courses and listing their description, format as:
+"
+I. General category or Major Requirements (If applicable) <- this is main heading and should be bolded
+1. COURSE_CODE: Course Title (Credits) < this should also be bolded
+    - Course description...
+    - Other details...
+    (here if there are fewer than 2 bullet points, omit the dash and just put the description next to the course title line)" 
+Make sure to follow this format  (including indentation, and make sure that the details are on seperate lines).
+    
 QUESTION:
 {question}
 
