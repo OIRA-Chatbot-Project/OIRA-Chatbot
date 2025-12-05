@@ -28,6 +28,8 @@ export default function ChatInterface({
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const [seenMessageIds, setSeenMessageIds] = useState<Set<number>>(new Set())
+  const [animateMessageId, setAnimateMessageId] = useState<number | undefined>(undefined)
   const [showSettings, setShowSettings] = useState(false)
   const [animationEnabled, setAnimationEnabled] = useState<boolean>(() => {
     try {
@@ -76,6 +78,8 @@ export default function ChatInterface({
       if (response.ok) {
         const data = await response.json()
         setMessages(data.messages)
+        setSeenMessageIds(new Set((data.messages || []).map((m: Message) => m.id)))
+        setAnimateMessageId(undefined)
         if (data.messages && data.messages.length > 0) {
           onSessionHasMessages?.(sessionId)
         }
@@ -138,6 +142,11 @@ export default function ChatInterface({
       created_at: new Date().toISOString(),
     }
     setMessages(prev => [...prev, userMessage])
+    setSeenMessageIds(prev => {
+      const next = new Set(prev)
+      next.add(userMessage.id)
+      return next
+    })
     setIsLoading(true)
     setError(null)
     const hasExistingUserMessage = messages.some(msg => msg.role === 'user')
@@ -178,6 +187,13 @@ export default function ChatInterface({
         created_at: new Date().toISOString(),
       }
       setMessages(prev => [...prev, assistantMessage])
+      setSeenMessageIds(prev => {
+        const next = new Set(prev)
+        next.add(assistantMessage.id)
+        return next
+      })
+      const shouldAnimateAssistant = animationEnabled && !seenMessageIds.has(assistantMessage.id)
+      setAnimateMessageId(shouldAnimateAssistant ? assistantMessage.id : undefined)
       
       // Only save session after successful first exchange
       if (isFirstMessage) {
@@ -292,6 +308,14 @@ export default function ChatInterface({
       }
 
       setMessages(prev => [...prev, scheduleMessage, assistantMessage])
+      setSeenMessageIds(prev => {
+        const next = new Set(prev)
+        next.add(scheduleMessage.id)
+        next.add(assistantMessage.id)
+        return next
+      })
+      const shouldAnimateAssistant = animationEnabled && !seenMessageIds.has(assistantMessage.id)
+      setAnimateMessageId(shouldAnimateAssistant ? assistantMessage.id : undefined)
       onSessionHasMessages?.(sessionId)
       setUploadError(null)
     } catch (err) {
@@ -430,7 +454,7 @@ export default function ChatInterface({
             <div className="mt-4 flex items-center justify-between">
               <div>
                 <h3 className="text-sm font-semibold">Playback</h3>
-                <p className="text-xs text-gray-500">Show responses word-by-word.</p>
+                <p className="text-xs text-gray-500">Show responses character-by-character.</p>
               </div>
               <button
                 onClick={() => {
@@ -500,10 +524,7 @@ export default function ChatInterface({
           onFeedback={submitFeedback}
           theme={theme}
           animationEnabled={animationEnabled}
-          animateMessageId={(() => {
-            const last = [...messages].reverse().find(m => m.role === 'assistant')
-            return last ? last.id : undefined
-          })()}
+          animateMessageId={animateMessageId}
         />
         
         {isLoading && (

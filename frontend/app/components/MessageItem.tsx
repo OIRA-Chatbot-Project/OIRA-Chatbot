@@ -28,13 +28,13 @@ export default function MessageItem({ message, onFeedback, theme, animationEnabl
   // Remove citation tokens but keep surrounding whitespace/newlines intact; then collapse excessive horizontal spaces
   const cleanedContent = rawContent.replace(citationRegex, '').replace(/ {2,}/g, ' ')
 
-  // Prepare words/tokens from cleaned content (keep whitespace tokens so spacing looks natural)
-  const words = cleanedContent ? cleanedContent.split(/(\s+)/) : []
+  const totalChars = cleanedContent.length
+  const displayedContent = shouldAnimate ? cleanedContent.slice(0, displayedCount) : cleanedContent
 
-  // Run the word-by-word reveal
+  // Run the character-by-character reveal
   useEffect(() => {
     if (!shouldAnimate) {
-      setDisplayedCount(words.length)
+      setDisplayedCount(totalChars)
       setAnimationComplete(true)
       return
     }
@@ -42,18 +42,26 @@ export default function MessageItem({ message, onFeedback, theme, animationEnabl
     setDisplayedCount(0)
     setAnimationComplete(false)
     let i = 0
-    const delayPerUnit = 40 // ms per token (words and spaces)
-    const id = setInterval(() => {
-      i += 1
-      setDisplayedCount(i)
-      if (i >= words.length) {
-        clearInterval(id)
-        setAnimationComplete(true)
-      }
-    }, delayPerUnit)
+    let intervalId: number | null = null
+    const startDelay = 120 // allow full message render before playback
+    const delayPerUnit = 5 // ms per character
 
-    return () => clearInterval(id)
-  }, [message.id, animationEnabled, animate])
+    const startTimer = window.setTimeout(() => {
+      intervalId = window.setInterval(() => {
+        i += 1
+        setDisplayedCount(i)
+        if (i >= totalChars) {
+          if (intervalId !== null) clearInterval(intervalId)
+          setAnimationComplete(true)
+        }
+      }, delayPerUnit)
+    }, startDelay)
+
+    return () => {
+      clearTimeout(startTimer)
+      if (intervalId !== null) clearInterval(intervalId)
+    }
+  }, [message.id, animationEnabled, animate, totalChars, shouldAnimate])
   const [showFeedbackNote, setShowFeedbackNote] = useState(false)
   const [feedbackNote, setFeedbackNote] = useState('')
   const [pendingRating, setPendingRating] = useState<number | null>(null)
@@ -155,18 +163,14 @@ export default function MessageItem({ message, onFeedback, theme, animationEnabl
                 : 'bg-white/90 text-gray-900 shadow-lg shadow-gray-200/60 border border-white/70'
           }`}
         >
-          <div className={`markdown-content ${isUser ? 'text-white' : theme === 'dark' ? 'text-gray-100' : 'text-gray-900'}`}>
-            {shouldAnimate && !animationComplete ? (
-              <div className="animated-text whitespace-pre-wrap">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                  {words.slice(0, displayedCount).join('')}
-                </ReactMarkdown>
-                <span className="inline-block animate-pulse ml-1">▌</span>
-              </div>
-            ) : (
+          <div className={`markdown-content relative ${isUser ? 'text-white' : theme === 'dark' ? 'text-gray-100' : 'text-gray-900'}`}>
+            <div className="leading-normal">
               <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {cleanedContent}
+                {displayedContent}
               </ReactMarkdown>
+            </div>
+            {shouldAnimate && !animationComplete && (
+              <span className="inline-block animate-pulse ml-1">▌</span>
             )}
           </div>
           

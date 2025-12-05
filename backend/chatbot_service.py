@@ -432,6 +432,7 @@ I. General category or Major Requirements (If applicable) <- this is main headin
     - Other details...
     (here if there are fewer than 2 bullet points, omit the dash and just put the description next to the course title line)" 
 Make sure to follow this format  (including indentation, and make sure that the details are on seperate lines).
+Don't leaeve any extra empty lines in the final response.
     
     
 FINAL CHECK BEFORE ANSWERING

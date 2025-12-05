@@ -13,7 +13,7 @@ interface MessageListProps {
 
 export default function MessageList({ messages, onFeedback, theme, animationEnabled, animateMessageId }: MessageListProps) {
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       {messages.map((message) => (
         <MessageItem
           key={message.id}
