@@ -65,6 +65,7 @@ export default function MessageItem({ message, onFeedback, theme, animationEnabl
   const [showFlagFeedback, setShowFlagFeedback] = useState(false)
   const [flagReason, setFlagReason] = useState('')
   const [flagComment, setFlagComment] = useState('')
+  const [citationsOpen, setCitationsOpen] = useState(false)
 
   const isUser = message.role === 'user'
 
@@ -108,6 +109,10 @@ export default function MessageItem({ message, onFeedback, theme, animationEnabl
     setFlagReason('')
     setFlagComment('')
   }
+
+  useEffect(() => {
+    setCitationsOpen(false)
+  }, [message.id])
 
   const toggleFlagFeedback = () => {
     setShowFlagFeedback(prev => {
@@ -175,45 +180,63 @@ export default function MessageItem({ message, onFeedback, theme, animationEnabl
                 theme === 'dark' ? 'border-slate-700/80' : 'border-gray-200/80'
               }`}
             >
-              <p
-                className={`text-xs font-semibold mb-2 ${
-                  theme === 'dark' ? 'text-gray-300' : 'text-gray-600'
+              <button
+                type="button"
+                onClick={() => setCitationsOpen(prev => !prev)}
+                className={`w-full flex items-center justify-between gap-2 text-xs font-semibold ${
+                  theme === 'dark'
+                    ? 'text-gray-300 hover:text-white'
+                    : 'text-gray-600 hover:text-gray-900'
                 }`}
+                aria-expanded={citationsOpen}
               >
-                📚 References ({message.citations.length}):
-              </p>
-              <div className="space-y-2">
-                {message.citations.map((citation, idx) => (
-                  <div
-                    key={idx}
-                    className={`text-xs rounded-2xl p-3 border ${
-                      theme === 'dark'
-                        ? 'bg-slate-900/60 text-gray-200 border-slate-800'
-                        : 'bg-white text-gray-600 border-gray-200'
-                    }`}
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`text-base transform transition-transform ${citationsOpen ? 'rotate-90' : ''}`}
                   >
-                    {/* 🔗 FIXED: Dynamic PDF link */}
-                    <div className="font-medium">
-                      <a
-                        href={`${typeof window !== 'undefined' ? window.location.origin : ''}/catalog.pdf#page=${citation.page}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="underline text-blue-500 hover:text-blue-600"
-                      >
-                        [{citation.source}, p. {citation.page}]
-                      </a>
-                    </div>
+                    ▶
+                  </span>
+                  <span>📚 References ({message.citations.length})</span>
+                </div>
+                <span className="text-[11px] uppercase tracking-wide">
+                  {citationsOpen ? 'Hide' : 'Show'}
+                </span>
+              </button>
 
+              {citationsOpen && (
+                <div className="space-y-2 mt-2">
+                  {message.citations.map((citation, idx) => (
                     <div
-                      className={`mt-1 line-clamp-2 ${
-                        theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
+                      key={idx}
+                      className={`text-xs rounded-2xl p-3 border ${
+                        theme === 'dark'
+                          ? 'bg-slate-900/60 text-gray-200 border-slate-800'
+                          : 'bg-white text-gray-600 border-gray-200'
                       }`}
                     >
-                      {citation.content}
+                      {/* 🔗 FIXED: Dynamic PDF link */}
+                      <div className="font-medium">
+                        <a
+                          href={`${typeof window !== 'undefined' ? window.location.origin : ''}/catalog.pdf#page=${citation.page}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="underline text-blue-500 hover:text-blue-600"
+                        >
+                          [{citation.source}, p. {citation.page}]
+                        </a>
+                      </div>
+
+                      <div
+                        className={`mt-1 line-clamp-2 ${
+                          theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
+                        }`}
+                      >
+                        {citation.content}
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
