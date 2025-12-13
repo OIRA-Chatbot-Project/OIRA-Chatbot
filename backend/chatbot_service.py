@@ -429,7 +429,7 @@ Subsection should be indented under main headings.
 Whenever recommending courses and listing their description, format as:
 "
 I. General category or Major Requirements (If applicable) <- this is main heading and should be bolded
-1. COURSE_CODE: Course Title (Credits) < this should also be bolded
+1. COURSE_CODE: Course Title (Credits) <- this should also be bolded
     - Course description...
     - Other details...
     (here if there are fewer than 2 bullet points, omit the dash and just put the description next to the course title line)" 

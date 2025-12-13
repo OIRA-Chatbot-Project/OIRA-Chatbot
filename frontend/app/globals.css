@@ -64,22 +64,27 @@ body[data-theme='dark'] .scrollbar-thin::-webkit-scrollbar-thumb:hover {
 }
 
 /* Markdown styling for chat messages */
+
+/* Get a bottom margin of 0.45rem for paragraph spacing. */
 .markdown-content p {
   margin-bottom: 0.45rem;
 }
 
+/* ul (unordered list) use disc bullets, indent 1.5rem, and add 0.5rem bottom margin. */
 .markdown-content ul {
   list-style-type: disc;
   margin-left: 1.5rem;
   margin-bottom: 0.5rem;
 }
 
+/* ol (ordered list) use decimal numbering, indent 1.5rem, and add 0.5rem bottom margin. */
 .markdown-content ol {
   list-style-type: decimal;
   margin-left: 1.5rem;
   margin-bottom: 0.5rem;
 }
 
+/* li (wrap around each list entry)  get 0.15rem bottom margin */
 .markdown-content li {
   margin-bottom: 0.15rem;
 }
@@ -88,6 +93,7 @@ body[data-theme='dark'] .scrollbar-thin::-webkit-scrollbar-thumb:hover {
   font-weight: 600;
 }
 
+/* Formatting heading elements for big sections */
 .markdown-content h2 {
   font-size: 1.125rem;
   font-weight: 600;
@@ -102,6 +108,7 @@ body[data-theme='dark'] .scrollbar-thin::-webkit-scrollbar-thumb:hover {
   margin-bottom: 0.35rem;
 }
 
+/* removes bottom margin on the last child element to avoid extra trailing space. */
 .markdown-content > :last-child {
   margin-bottom: 0;
 }

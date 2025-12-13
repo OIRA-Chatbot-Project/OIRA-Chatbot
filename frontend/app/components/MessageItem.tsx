@@ -163,6 +163,7 @@ export default function MessageItem({ message, onFeedback, theme, animationEnabl
                 : 'bg-white/90 text-gray-900 shadow-lg shadow-gray-200/60 border border-white/70'
           }`}
         >
+          {/* Renders the list syntax  (sections, bullets, numbered lists) to become HTML with nested hierarchy.*/}
           <div className={`markdown-content relative ${isUser ? 'text-white' : theme === 'dark' ? 'text-gray-100' : 'text-gray-900'}`}>
             <div className="leading-normal">
               <ReactMarkdown remarkPlugins={[remarkGfm]}>

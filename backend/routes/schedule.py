@@ -88,8 +88,8 @@ async def upload_schedule(
         # Strip inline bracket citations from schedule-upload responses as well
         try:
             cleaned_answer = re.sub(r"\[[^\]]+?,\s*p\.\s*\d+\]", "", answer)
-            cleaned_answer = re.sub(r"\n{2,}", "\n\n", cleaned_answer)
-            cleaned_answer = re.sub(r"\s{2,}", " ", cleaned_answer)
+            cleaned_answer = re.sub(r"\n{3,}", "\n\n", cleaned_answer)
+            cleaned_answer = re.sub(r"[ \t]{2,}", " ", cleaned_answer)
             cleaned_answer = cleaned_answer.strip()
         except Exception:
             cleaned_answer = answer

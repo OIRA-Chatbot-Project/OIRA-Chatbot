@@ -78,9 +78,10 @@ async def chat(
         # Remove inline bracket citations like "[filename, p. 123]" from the answer
         try:
             cleaned_answer = re.sub(r"\[[^\]]+?,\s*p\.\s*\d+\]", "", answer)
-            # collapse multiple spaces/newlines that may have been left behind
-            cleaned_answer = re.sub(r"\n{2,}", "\n\n", cleaned_answer)
-            cleaned_answer = re.sub(r"\s{2,}", " ", cleaned_answer)
+            # Collapse excessive blank lines but preserve markdown line breaks
+            cleaned_answer = re.sub(r"\n{3,}", "\n\n", cleaned_answer)
+            # Collapse only repeated spaces/tabs (not newlines) to avoid flattening lists
+            cleaned_answer = re.sub(r"[ \t]{2,}", " ", cleaned_answer)
             cleaned_answer = cleaned_answer.strip()
         except Exception:
             cleaned_answer = answer
