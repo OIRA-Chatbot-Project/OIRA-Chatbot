@@ -485,5 +485,15 @@ KNOWLEDGE (catalog snippets with citation tags):
         return self.get_answer(question, conversation_history)
 
 
-# Global instance
-chatbot_service = ChatbotService()
+# Global instance with lazy initialization
+_chatbot_service_instance = None
+
+def get_chatbot_service() -> ChatbotService:
+    """Get or create the global chatbot service instance (lazy initialization)"""
+    global _chatbot_service_instance
+    if _chatbot_service_instance is None:
+        _chatbot_service_instance = ChatbotService()
+    return _chatbot_service_instance
+
+# For backward compatibility
+chatbot_service = None  # Will be initialized on first use

@@ -7,7 +7,7 @@ from datetime import datetime
 from database import get_db, Session as DBSession, User as DBUser, Message as DBMessage
 from models import ScheduleUploadResponse, Citation, ParsedCourse
 from auth import get_current_user, get_user_id_from_token
-from chatbot_service import chatbot_service
+from chatbot_service import get_chatbot_service
 from schedule_parser import extract_text_from_upload, parse_schedule_entries, summarize_schedule
 
 router = APIRouter(prefix="/schedule", tags=["schedule"])
@@ -83,7 +83,8 @@ async def upload_schedule(
             for msg in reversed(history_messages)
         ]
 
-        answer, citations = chatbot_service.recommend_courses_from_schedule(summary, conversation_history)
+        chatbot = get_chatbot_service()
+        answer, citations = chatbot.recommend_courses_from_schedule(summary, conversation_history)
 
         # Strip inline bracket citations from schedule-upload responses as well
         try:

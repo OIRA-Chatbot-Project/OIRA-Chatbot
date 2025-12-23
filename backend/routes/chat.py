@@ -7,7 +7,7 @@ from datetime import datetime
 from database import get_db, Session as DBSession, User as DBUser, Message as DBMessage
 from models import ChatRequest, ChatResponse, Citation
 from auth import get_current_user, get_user_id_from_token
-from chatbot_service import chatbot_service
+from chatbot_service import get_chatbot_service
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -73,7 +73,8 @@ async def chat(
         ]
         
         # Get answer from chatbot service
-        answer, citations = chatbot_service.get_answer(request.message, conversation_history)
+        chatbot = get_chatbot_service()
+        answer, citations = chatbot.get_answer(request.message, conversation_history)
         
         # Remove inline bracket citations like "[filename, p. 123]" from the answer
         try:

@@ -67,5 +67,5 @@ for i in range(0, total, BATCH_SIZE):
     vector_store.add_documents(documents=batch_chunks, ids=batch_ids)
 
 # ChromaDB auto-persists when using persist_directory
-print(f"✅ Done. Added {total} chunks to {CHROMA_PATH} (collection='{COLLECTION}').")
+print(f"Added {total} chunks to {CHROMA_PATH} (collection='{COLLECTION}').")
 print("Tip: If you change PDFs significantly, consider deleting the chroma_db folder and re-ingesting.")
