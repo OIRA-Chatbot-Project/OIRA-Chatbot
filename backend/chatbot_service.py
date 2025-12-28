@@ -6,6 +6,7 @@ import os
 import re
 import json
 import config
+from prompts import get_decompose_prompt, get_user_prompt, get_contextualize_prompt, get_question_classifier_prompt, SYSTEM_PROMPT
 
 class ChatbotService:
     """Service for handling chatbot RAG operations"""
@@ -26,7 +27,13 @@ class ChatbotService:
             temperature=0.1,
             model=config.OPENAI_MODEL
         )
-        
+
+        # Initialize a separate LLM for question classification (very low temperature)
+        self.classifier_llm = ChatOpenAI(
+            temperature=config.QUESTION_CLASSIFIER_TEMPERATURE,
+            model=config.OPENAI_MODEL
+        )
+
         # Connect to ChromaDB
         self.vector_store = Chroma(
             collection_name=config.CHROMA_COLLECTION_NAME,
@@ -50,7 +57,73 @@ class ChatbotService:
             return "Source"
         name = os.path.basename(path)
         return name.replace("_", " ")
-    
+
+    def _classify_question(self, question: str) -> str:
+        """
+        Classify a question as 'course_catalog', 'academic_policy', or 'off_topic'.
+
+        This pre-retrieval classification allows us to:
+        1. Reject off-topic questions immediately
+        2. Filter ChromaDB searches to relevant document types
+
+        Args:
+            question: The user's question
+
+        Returns:
+            One of: 'course_catalog', 'academic_policy', 'off_topic'
+            Falls back to 'course_catalog' on error
+        """
+        if not config.ENABLE_OFF_TOPIC_DETECTION:
+            # Classification disabled - default to catalog
+            return "course_catalog"
+
+        classifier_prompt = get_question_classifier_prompt(question)
+
+        try:
+            response = self.classifier_llm.invoke(classifier_prompt)
+            response_text = response.content.strip()
+
+            # Extract JSON
+            json_start = response_text.find('{')
+            json_end = response_text.rfind('}') + 1
+            if json_start >= 0 and json_end > json_start:
+                json_str = response_text[json_start:json_end]
+                data = json.loads(json_str)
+
+                category = data.get("category", "course_catalog")
+
+                # Validate category
+                if category in ["course_catalog", "academic_policy", "off_topic"]:
+                    print(f"[CLASSIFICATION] Question classified as: {category}")
+                    return category
+                else:
+                    print(f"[WARNING] Invalid category '{category}', defaulting to 'course_catalog'")
+                    return "course_catalog"
+
+        except (json.JSONDecodeError, KeyError, AttributeError) as e:
+            print(f"[WARNING] Question classification failed: {e}. Defaulting to 'course_catalog'")
+
+        # Fallback to catalog (safer than rejecting)
+        return "course_catalog"
+
+    def _get_document_url(self, source_filename: str, page: int) -> str:
+        """
+        Generate appropriate URL for a document citation based on its source.
+
+        Args:
+            source_filename: Base filename (e.g., "GRADE REPLACEMENT POLICY.pdf")
+            page: Page number (1-indexed)
+
+        Returns:
+            URL string for frontend to link to
+        """
+        # Clean filename for URL (remove spaces, special chars)
+        url_safe_filename = source_filename.replace(" ", "%20")
+
+        # For now, all PDFs are served from same endpoint with different filenames
+        # Frontend should handle routing to correct PDF
+        return f"http://localhost:3000/{url_safe_filename}#page={page}"
+
     def _prepare_knowledge(self, docs) -> str:
         """
         Build a labeled context string so the model can cite pages.
@@ -78,38 +151,7 @@ class ChatbotService:
         Returns:
             List of sub-questions (or single question if decomposition not needed)
         """
-        decompose_prompt = f"""You are an academic advising assistant. Analyze the student's question and determine if it needs to be broken down into multiple sub-questions for better retrieval and answering.
-
-DECOMPOSITION CRITERIA:
-1. Comparison questions (e.g., "Compare X and Y", "What's the difference between A and B")
-2. Multi-part questions with "and" (e.g., "What are prerequisites and what comes after?")
-3. Conditional questions (e.g., "If I do X, then what about Y?")
-4. Questions requiring information from multiple sources
-
-IMPORTANT CONSTRAINTS:
-- Maximum 5 sub-questions (prefer 2-4 for best results)
-- If question asks about 6+ items, group them or suggest user be more specific
-- Each sub-question needs sufficient retrieval budget
-
-Return JSON ONLY. No other text.
-
-If the question is SIMPLE and direct (e.g., "What is CSCI 204?"), respond:
-{{"type": "simple", "sub_questions": []}}
-
-If the question is COMPLEX but manageable (2-5 topics), break it into specific sub-questions:
-{{"type": "complex", "sub_questions": ["sub-question 1", "sub-question 2", ...]}}
-
-If the question is TOO BROAD (6+ items or very general), suggest clarification:
-{{"type": "too_broad", "suggestion": "This question covers many topics. Please ask about 2-3 specific courses/requirements."}}
-
-Each sub-question should:
-- Be self-contained and answerable independently
-- Focus on one specific aspect
-- Include relevant context (course codes, major names, etc.)
-
-QUESTION: {question}
-
-JSON RESPONSE:"""
+        decompose_prompt = get_decompose_prompt(question)
 
         try:
             response = self.decompose_llm.invoke(decompose_prompt)
@@ -147,18 +189,19 @@ JSON RESPONSE:"""
         # Fallback to original question
         return [question]
     
-    def _retrieve_for_subqueries(self, sub_questions: List[str]) -> List:
+    def _retrieve_for_subqueries(self, sub_questions: List[str], doc_type_filter: Optional[str] = None) -> List:
         """
         Retrieve documents for multiple sub-questions with adaptive allocation.
-        
+
         Strategy:
         1. Guarantee minimum documents per sub-question
         2. Distribute remaining budget proportionally
         3. Use round-robin for balanced representation
-        
+
         Args:
             sub_questions: List of sub-questions to retrieve for
-            
+            doc_type_filter: Optional document type to filter by ('catalog' or 'policy')
+
         Returns:
             Combined list of unique documents
         """
@@ -180,7 +223,15 @@ JSON RESPONSE:"""
         docs_per_question = []
         for sub_q in sub_questions:
             try:
-                docs = self.retriever.invoke(sub_q)
+                # Apply doc_type filter if specified
+                if doc_type_filter:
+                    docs = self.vector_store.similarity_search(
+                        sub_q,
+                        k=config.RETRIEVER_K,
+                        filter={"doc_type": doc_type_filter}
+                    )
+                else:
+                    docs = self.retriever.invoke(sub_q)
                 docs_per_question.append(docs)
             except Exception as e:
                 print(f"[WARNING] Retrieval failed for sub-query '{sub_q}': {e}")
@@ -250,19 +301,7 @@ JSON RESPONSE:"""
             for msg in recent_history
         ])
         
-        contextualize_prompt = f"""Given the conversation history below and a new user question, rewrite the question as a standalone query that includes all necessary context.
-
-If the question is already self-contained, return it as-is.
-If it refers to previous context (e.g., "What about prerequisites for that?"), incorporate the context to make it standalone.
-
-Return ONLY the rewritten question, nothing else.
-
-CONVERSATION HISTORY:
-{history_text}
-
-NEW QUESTION: {question}
-
-STANDALONE QUESTION:"""
+        contextualize_prompt = get_contextualize_prompt(question, history_text)
         
         try:
             response = self.decompose_llm.invoke(contextualize_prompt)
@@ -276,30 +315,52 @@ STANDALONE QUESTION:"""
         
         return question
     
-    def get_answer(self, question: str, conversation_history: List[Dict[str, str]], use_multi_step: Optional[bool] = None) -> Tuple[str, List[Dict]]:
+    def get_answer(self, question: str, conversation_history: List[Dict[str, str]], use_multi_step: Optional[bool] = None) -> Tuple[str, List[Dict], str]:
         """
-        Get an answer to a question using RAG with optional multi-step query decomposition
-        
+        Get an answer to a question using RAG with optional multi-step query decomposition.
+        Now includes question classification and document type filtering.
+
         Args:
             question: The user's question
             conversation_history: List of previous messages with 'role' and 'content'
             use_multi_step: Whether to use multi-step query decomposition (default: from config)
-        
+
         Returns:
-            Tuple of (answer, citations)
+            Tuple of (answer, citations, question_category)
         """
+        # STEP 1: Classify the question
+        question_category = self._classify_question(question)
+
+        # STEP 2: Reject off-topic questions immediately
+        if question_category == "off_topic":
+            print(f"[OFF-TOPIC] Question rejected: {question}")
+            return (
+                config.OFF_TOPIC_MESSAGE,
+                [],
+                "off_topic"
+            )
+
+        # STEP 3: Determine document type filter
+        doc_type_filter = None
+        if question_category == "course_catalog":
+            doc_type_filter = "catalog"
+        elif question_category == "academic_policy":
+            doc_type_filter = "policy"
+
+        print(f"[INFO] Filtering retrieval to doc_type: {doc_type_filter}")
+
         try:
             # Use config default if not specified
             if use_multi_step is None:
                 use_multi_step = config.USE_MULTI_STEP_QUERY
-            
+
             # Build contextual query for better follow-up handling
             search_query = self._build_contextual_query(question, conversation_history)
-            
-            # Step 1: Decompose query if needed and enabled
+
+            # STEP 4: Decompose query if needed and enabled
             if use_multi_step:
                 sub_questions = self._decompose_query(search_query)
-                
+
                 # Log decomposition for debugging
                 if len(sub_questions) > 1:
                     print(f"\n[DECOMPOSITION] Query Decomposition:")
@@ -308,36 +369,52 @@ STANDALONE QUESTION:"""
                     print(f"Number of sub-questions: {len(sub_questions)}")
                     for i, sq in enumerate(sub_questions, 1):
                         print(f"  {i}. {sq}")
-                    
+
                     # Warn if approaching limits
                     if len(sub_questions) >= 4:
                         print(f"[WARNING] High number of sub-questions ({len(sub_questions)}). Results may be limited per topic.")
-                
-                # Retrieve documents for all sub-questions
-                docs = self._retrieve_for_subqueries(sub_questions)
+
+                # Retrieve documents for all sub-questions WITH FILTERING
+                docs = self._retrieve_for_subqueries(sub_questions, doc_type_filter)
             else:
-                # Single-step retrieval
-                docs = self.retriever.invoke(search_query)
-            
+                # Single-step retrieval WITH FILTERING
+                if doc_type_filter:
+                    docs = self.vector_store.similarity_search(
+                        search_query,
+                        k=config.RETRIEVER_K,
+                        filter={"doc_type": doc_type_filter}
+                    )
+                else:
+                    docs = self.retriever.invoke(search_query)
+
             # Handle no results
             if not docs:
+                fallback_message = (
+                    "I couldn't retrieve relevant information from the documents. "
+                    "Please try rephrasing your question or contact your academic advisor for assistance."
+                )
+                if question_category == "academic_policy":
+                    fallback_message = (
+                        "I couldn't find relevant policy information. "
+                        "Please contact the Office of the Registrar or your academic advisor for guidance on this policy question."
+                    )
                 return (
-                    "I couldn't retrieve relevant catalog sections. "
-                    "Please try rephrasing (e.g., include a course code like CSCI 204) "
-                    "or contact your academic advisor for assistance.",
-                    []
+                    fallback_message,
+                    [],
+                    question_category
                 )
         except Exception as e:
             print(f"[ERROR] Retrieval error: {e}")
             return (
-                "Sorry, I ran into an error retrieving catalog information. "
+                "Sorry, I ran into an error retrieving information. "
                 "Please try again later or contact support.",
-                []
+                [],
+                question_category
             )
-        
+
         # Build knowledge base with page citations
         knowledge = self._prepare_knowledge(docs)
-        
+
         # Build citations list for API response
         citations = []
         for doc in docs:
@@ -345,16 +422,18 @@ STANDALONE QUESTION:"""
             src = self._short_source(meta.get("source", "Catalogue"))
             # PyPDFDirectoryLoader is 0-based; add 1 for human-friendly
             page = (meta.get("page", 0) or 0) + 1
-            
+            source_filename = os.path.basename(meta.get("source", "catalog.pdf"))
+            doc_type = meta.get("doc_type", "catalog")
+
             citation = {
-                    "content": doc.page_content[:200] + "..." if len(doc.page_content) > 200 else doc.page_content,
-                    "source": src,
-                    "page": page,
-                    "url": f"http://localhost:3000/catalog.pdf#page={page}"
-     
+                "content": doc.page_content[:200] + "..." if len(doc.page_content) > 200 else doc.page_content,
+                "source": src,
+                "page": page,
+                "url": self._get_document_url(source_filename, page),
+                "doc_type": doc_type  # Include for frontend filtering/display
             }
             citations.append(citation)
-        
+
         # Format conversation history for context
         history_context = ""
         if conversation_history:
@@ -362,118 +441,39 @@ STANDALONE QUESTION:"""
                 f"{msg['role'].capitalize()}: {msg['content'][:300]}"  # Truncate long messages
                 for msg in conversation_history[-6:]  # Last 3 exchanges
             ])
-        
+
         # Build prompt using system/user message separation
-        system_prompt = """You are the Bucknell University Academic Catalogue Virtual Assistant.
-
-YOUR ONLY SOURCE OF TRUTH
-- You may ONLY use information that appears in the KNOWLEDGE section below.
-- You may NOT use outside knowledge, assumptions, or “typical patterns.”
-- Do NOT infer or guess requirements, prerequisites, or policies.
-- If the KNOWLEDGE does not clearly contain the requested information, you MUST respond exactly with:
-  "I'm not able to find that information in the catalog snippets I have here. Please contact your academic advisor or consult the full catalog."
-
-IF INFORMATION IS PARTIAL OR UNCLEAR
-- If KNOWLEDGE is related but does not fully answer the question, state clearly what IS known and then use the required fallback sentence above.
-- If there are conflicts or contradictions in KNOWLEDGE, say that the information appears inconsistent and use the fallback sentence above.
-
-STYLE & FORMAT
-- Be professional, warm, and student-centered.
-- Use short bullet points for:
-  - Requirements
-  - Steps
-  - Recommended courses or options
-- Keep answers under 300 words unless the question explicitly asks for exhaustive detail.
-- Do NOT repeat the entire question; summarize it briefly only if needed for clarity.
-
-<<<<<<< HEAD
-Course Recommendation Guidance (when applicable):
-- Prioritize courses aligned with the student's major/concentration/interests.
-- Verify prerequisites before recommending.
-- Recommend a balanced load (major/core + gen ed + electives).
-- Consider student's year (100-level for first-years, then 200/300 etc.).
-- Don't suggest courses already completed or their prerequisites; suggest the next level instead.
-- List suggested courses in ascending order (100–500).
-- If you see course names adjacent to numbers, treat numbers under a ‘Credits’ column as credits, not part of the course name
-=======
-CITATIONS
-- Every factual statement drawn from KNOWLEDGE should be supportable by a citation.
-- Include page citations by copying the bracket tags from the relevant chunks, for example:
-  [2025-2026 course catalog.pdf, p. 367]
-- Place citations immediately after the relevant sentence or bullet.
-- If multiple chunks support a statement, one citation is enough.
->>>>>>> e297f7b6bdc8620cccc072fe3c30413ecaaed842
-
-COURSE RECOMMENDATIONS (WHEN APPLICABLE)
-When recommending courses (e.g., “What should I take next?”):
-- Prioritize courses aligned with the student’s major, concentration, and/or stated interests, as explicitly shown in KNOWLEDGE.
-- Verify prerequisites in KNOWLEDGE before recommending a course.
-- Recommend a balanced schedule (major/core + general education + electives) only if KNOWLEDGE provides enough detail to do so.
-- Consider course level by student year (100-level for most first-years, then 200/300, etc.) only when KNOWLEDGE explicitly supports these patterns.
-- Do NOT recommend courses that KNOWLEDGE indicates are already completed; suggest the next appropriate level instead.
-- List suggested courses in ascending course number order (100–500) when possible.
-- If you cannot verify prerequisites, requirements, or completion history from KNOWLEDGE, say so and use the fallback sentence.
-
-HALLUCINATION PREVENTION
-- Never invent or guess:
-  - Course codes
-  - Course names
-  - Requirements
-  - Policies
-  - Counts (e.g., “you must take 3 courses”) that are not explicitly stated in KNOWLEDGE.
-- Avoid phrases like “typically,” “usually,” or “in general.”
-- If you are uncertain whether KNOWLEDGE supports a statement, you MUST omit the statement and use the fallback sentence instead.
-
-The answer should be well-structured and easy to read, with subheadings and bullet points as appropriate. 
-Subsection should be indented under main headings.
-Whenever recommending courses and listing their description, format as:
-"
-I. General category or Major Requirements (If applicable) <- this is main heading and should be bolded
-1. COURSE_CODE: Course Title (Credits) <- this should also be bolded
-    - Course description...
-    - Other details...
-    (here if there are fewer than 2 bullet points, omit the dash and just put the description next to the course title line)" 
-Make sure to follow this format  (including indentation, and make sure that the details are on seperate lines).
-Don't leaeve any extra empty lines in the final response.
-    
-    
-FINAL CHECK BEFORE ANSWERING
-Before sending your answer, mentally verify:
-- Every factual claim is directly supported by KNOWLEDGE.
-- All necessary citations are present.
-- You have used the exact fallback sentence if the answer is missing or incomplete in KNOWLEDGE."""
-
-
-        user_prompt = f"""QUESTION:
-{question}
-
-{f"CONVERSATION HISTORY:\n{history_context}\n" if history_context else ""}
-KNOWLEDGE (catalog snippets with citation tags):
-{knowledge}"""
+        user_prompt = get_user_prompt(question, knowledge, history_context if conversation_history else "")
 
         try:
             # Use system/user message structure
             messages = [
-                SystemMessage(content=system_prompt),
+                SystemMessage(content=SYSTEM_PROMPT),
                 HumanMessage(content=user_prompt)
             ]
-            
+
             response = self.llm.invoke(messages)
             answer = response.content
-            
-            return answer, citations  # type: ignore
-            
+
+            # Add policy disclaimer if this is a policy question
+            if question_category == "academic_policy":
+                answer = answer + config.POLICY_DISCLAIMER
+
+            return answer, citations, question_category  # type: ignore
+
         except Exception as e:
             print(f"[ERROR] LLM generation error: {e}")
             return (
                 "Sorry, I encountered an error generating a response. "
                 "Please try again or contact your academic advisor.",
-                citations
+                citations,
+                question_category
             )
 
-    def recommend_courses_from_schedule(self, schedule_summary: str, conversation_history: List[Dict[str, str]]) -> Tuple[str, List[Dict]]:
+    def recommend_courses_from_schedule(self, schedule_summary: str, conversation_history: List[Dict[str, str]]) -> Tuple[str, List[Dict], str]:
         """
         Provide course recommendations using a student's prior schedule summary.
+        Returns tuple of (answer, citations, question_category).
         """
         question = (
             "A student shared their previously completed courses and experiences:\n"

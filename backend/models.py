@@ -41,6 +41,8 @@ class Citation(BaseModel):
     content: str = Field(..., description="The text content of the citation")
     source: str = Field(..., description="Source document name")
     page: Optional[int] = Field(None, description="Page number if available")
+    url: Optional[str] = Field(None, description="URL to the source document page")
+    doc_type: Optional[str] = Field(None, description="Document type: 'catalog' or 'policy'")
 
 
 class ChatResponse(BaseModel):
@@ -49,6 +51,7 @@ class ChatResponse(BaseModel):
     answer: str = Field(..., description="The assistant's answer")
     citations: List[Citation] = Field(default_factory=list, description="List of citations")
     session_id: str = Field(..., description="Session identifier")
+    question_category: Optional[str] = Field(None, description="Question classification: 'course_catalog', 'academic_policy', or 'off_topic'")
 
 
 class ParsedCourse(BaseModel):

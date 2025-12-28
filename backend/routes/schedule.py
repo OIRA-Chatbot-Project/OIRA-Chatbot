@@ -84,7 +84,7 @@ async def upload_schedule(
         ]
 
         chatbot = get_chatbot_service()
-        answer, citations = chatbot.recommend_courses_from_schedule(summary, conversation_history)
+        answer, citations, question_category = chatbot.recommend_courses_from_schedule(summary, conversation_history)
 
         # Strip inline bracket citations from schedule-upload responses as well
         try:
@@ -114,7 +114,8 @@ async def upload_schedule(
             session_id=session_id,
             schedule_summary=summary,
             parsed_courses=[ParsedCourse(**course) for course in parsed_courses],
-            schedule_message_id=user_message.id
+            schedule_message_id=user_message.id,
+            question_category=question_category
         )
     except HTTPException:
         raise

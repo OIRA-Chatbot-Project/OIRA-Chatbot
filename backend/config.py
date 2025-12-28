@@ -38,3 +38,64 @@ API_DESCRIPTION = "API for Bucknell University course catalog chatbot"
 
 # CORS Configuration
 ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:3001").split(",")
+
+# Question Classification Configuration
+QUESTION_CLASSIFIER_TEMPERATURE = float(os.getenv("QUESTION_CLASSIFIER_TEMPERATURE", "0.1"))
+ENABLE_OFF_TOPIC_DETECTION = os.getenv("ENABLE_OFF_TOPIC_DETECTION", "true").lower() == "true"
+
+# Document Type Configuration
+DOCUMENT_TYPE_MAPPINGS = {
+    # Catalog documents
+    "catalog": [
+        "2025-2026 course catalog.pdf"
+    ],
+    # Policy documents
+    "policy": [
+        "ACADEMIC RESPONSIBILITY POLICY.pdf",
+        "ACADEMIC STANDING.pdf",
+        "ADVANCED PLACEMENT & CREDIT POLICY.pdf",
+        "CLASS ATTENDANCE POLICY.pdf",
+        "COLLEGE LEVEL EXAMINATION PROGRAM (CLEP) POLICY.pdf",
+        "COURSE REGISTRATION & WITHDRAWAL POLICY.pdf",
+        "CREDIT BY EXAMINATION POLICY.pdf",
+        "DECLARATION OF A MINOR POLICY.pdf",
+        "DEGREE & GRADUATION REQUIREMENTS POLICY.pdf",
+        "DOUBLE COUNTING COURSES POLICY.pdf",
+        "GRADE APPEALS POLICY.pdf",
+        "GRADE REPLACEMENT POLICY.pdf",
+        "INCOMPLETE GRADES POLICY.pdf",
+        "INTERNATIONAL BACCALAUREATE (IB) & CAMBRIDGE INTERNATIONAL A LEVEL CREDIT POLICY.pdf",
+        "SUPERIOR ACADEMIC ACHIEVEMENT (Honors Designations) POLICY.pdf",
+        "TRANSFER OF ACADEMIC CREDIT.pdf",
+        "WITHDRAWAL, LEAVE OF ABSENCE & SUSPENSION POLICY.pdf"
+    ]
+}
+
+# Off-Topic Rejection Message
+OFF_TOPIC_MESSAGE = """I'm a specialized chatbot designed to help with Bucknell University academic questions only.
+
+I can assist with:
+- Course information (descriptions, prerequisites, credits)
+- Major and minor requirements
+- Academic policies (registration, grading, withdrawal, etc.)
+- General education requirements
+- Course recommendations
+
+I cannot help with:
+- Non-academic topics (weather, news, general knowledge)
+- Technical support or IT issues
+- Housing, dining, or campus facilities
+- Financial aid or billing questions
+- Social events or student organizations
+
+For non-academic questions, please visit:
+- IT Support: https://bucknell.edu/about/offices-services/library-information-technology
+- Student Affairs: https://bucknell.edu/life-bucknell/student-affairs
+
+Please feel free to ask me any academic-related questions!"""
+
+# Policy Response Disclaimer
+POLICY_DISCLAIMER = """
+
+---
+**Important Note:** This information is from official Bucknell academic policies, but policies may change. For official guidance and questions about how these policies apply to your specific situation, please consult with your academic advisor or the Office of the Registrar."""
