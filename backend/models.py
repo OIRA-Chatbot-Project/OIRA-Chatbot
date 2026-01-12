@@ -52,6 +52,7 @@ class ChatResponse(BaseModel):
     citations: List[Citation] = Field(default_factory=list, description="List of citations")
     session_id: str = Field(..., description="Session identifier")
     question_category: Optional[str] = Field(None, description="Question classification: 'course_catalog', 'academic_policy', or 'off_topic'")
+    follow_ups: List[str] = Field(default_factory=list, description="Suggested follow-up questions tailored to the user")
 
 
 class ParsedCourse(BaseModel):

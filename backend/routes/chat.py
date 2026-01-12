@@ -72,9 +72,9 @@ async def chat(
             for msg in reversed(history_messages)  # Reverse to get chronological order
         ]
         
-        # Get answer from chatbot service (now returns 3 values)
+        # Get answer from chatbot service (now returns 4 values including follow-ups)
         chatbot = get_chatbot_service()
-        answer, citations, question_category = chatbot.get_answer(request.message, conversation_history)
+        answer, citations, question_category, followups = chatbot.get_answer(request.message, conversation_history)
         
         # Remove inline bracket citations like "[filename, p. 123]" from the answer
         try:
@@ -105,7 +105,8 @@ async def chat(
             answer=answer,
             citations=citation_objects,
             session_id=request.session_id,
-            question_category=question_category
+            question_category=question_category,
+            follow_ups=followups
         )
         
     except Exception as e:

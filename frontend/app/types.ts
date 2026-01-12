@@ -9,6 +9,7 @@ export interface Message {
   role: 'user' | 'assistant'
   content: string
   citations?: Citation[]
+  follow_ups?: string[]
   created_at: string
   feedback?: number // 1 for thumbs up, -1 for thumbs down
 }
@@ -18,6 +19,7 @@ export interface ChatResponse {
   answer: string
   citations: Citation[]
   session_id: string
+  follow_ups?: string[]
 }
 
 export interface MessagesResponse {

@@ -11,9 +11,10 @@ interface MessageItemProps {
   theme: Theme
   animationEnabled?: boolean
   animate?: boolean
+  onFollowupClick?: (text: string) => void
 }
 
-export default function MessageItem({ message, onFeedback, theme, animationEnabled = false, animate = false }: MessageItemProps) {
+export default function MessageItem({ message, onFeedback, theme, animationEnabled = false, animate = false, onFollowupClick }: MessageItemProps) {
   const [displayedCount, setDisplayedCount] = useState(0)
   const [animationComplete, setAnimationComplete] = useState(false)
 
@@ -287,6 +288,25 @@ export default function MessageItem({ message, onFeedback, theme, animationEnabl
               )}
             </div>
           )}
+
+            {message.follow_ups && message.follow_ups.length > 0 && (animationComplete || !shouldAnimate) && (
+              <div className="mt-4 pt-3 border-t">
+                <div className="text-sm font-semibold mb-2">Suggested follow-up questions</div>
+                <div className="flex flex-wrap gap-2">
+                  {message.follow_ups.map((s, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => onFollowupClick && onFollowupClick(s)}
+                      className={`px-3 py-1 rounded-full text-sm border transition-colors ${
+                        theme === 'dark' ? 'border-slate-700 text-gray-200 hover:bg-slate-800' : 'border-gray-200 text-gray-700 hover:bg-gray-100'
+                      }`}
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
         </div>
 
         {!isUser && !message.feedback && (

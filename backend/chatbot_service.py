@@ -7,6 +7,7 @@ import re
 import json
 import config
 from prompts import get_decompose_prompt, get_user_prompt, get_contextualize_prompt, get_question_classifier_prompt, SYSTEM_PROMPT
+import math
 
 class ChatbotService:
     """Service for handling chatbot RAG operations"""
@@ -108,6 +109,7 @@ class ChatbotService:
 
     def _get_document_url(self, source_filename: str, page: int) -> str:
         """
+        This is for the Reference block under each answer.
         Generate appropriate URL for a document citation based on its source.
 
         Args:
@@ -314,8 +316,58 @@ class ChatbotService:
             print(f"[WARNING] Contextualization failed: {e}. Using original question.")
         
         return question
+
+    def _generate_followups(self, question: str, answer: str, conversation_history: List[Dict[str, str]]) -> List[str]:
+        """
+        Generate up to 5 suggested follow-up questions tailored to the user's context
+        present in the conversation history. Returns a list of suggestion strings.
+        """
+        # Build a concise history string for the prompt
+        history_text = "\n".join([
+            f"{msg['role'].capitalize()}: {msg['content'][:300]}"
+            for msg in (conversation_history or [])[-6:]
+        ])
+
+        # Prompt the LLM to return a JSON array of suggestion strings
+        followup_prompt = (
+            "Using ONLY the conversation history and the assistant's answer below,\n"
+            "generate up to 5 short suggested follow-up questions the user might ask next.\n"
+            "Tailor suggestions to any contextual details present in the history (major, year, courses, preferences).\n"
+            "If no specific context is available, produce general useful follow-ups related to the question and answer.\n"
+            "Return ONLY a valid JSON array of strings (e.g. [\"...\", \"...\"]).\n\n"
+            f"CONVERSATION_HISTORY:\n{history_text}\n\n"
+            f"QUESTION:\n{question}\n\n"
+            f"ASSISTANT_ANSWER:\n{answer}\n\nJSON_ARRAY:"
+        )
+
+        try:
+            resp = self.decompose_llm.invoke(followup_prompt)
+            resp_text = resp.content.strip()
+
+            # Extract JSON array from any surrounding text
+            json_start = resp_text.find('[')
+            json_end = resp_text.rfind(']') + 1
+            if json_start >= 0 and json_end > json_start:
+                arr_str = resp_text[json_start:json_end]
+                data = json.loads(arr_str)
+                if isinstance(data, list):
+                    # Clean and limit to 5
+                    suggestions = [str(s).strip() for s in data if isinstance(s, (str,))]
+                    if len(suggestions) > 5:
+                        suggestions = suggestions[:5]
+                    return suggestions
+        except Exception as e:
+            print(f"[WARNING] Follow-up generation failed: {e}")
+
+        # Fallback: simple heuristic suggestions
+        fallback = [
+            "Can you clarify what you meant by that?",
+            "Do you want more details about any specific course or policy mentioned?",
+            "Would you like recommendations based on your major or year?"
+        ]
+        return fallback[:3]
     
-    def get_answer(self, question: str, conversation_history: List[Dict[str, str]], use_multi_step: Optional[bool] = None) -> Tuple[str, List[Dict], str]:
+    def get_answer(self, question: str, conversation_history: List[Dict[str, str]], use_multi_step: Optional[bool] = None) -> Tuple[str, List[Dict], str, List[str]]:
         """
         Get an answer to a question using RAG with optional multi-step query decomposition.
         Now includes question classification and document type filtering.
@@ -337,7 +389,8 @@ class ChatbotService:
             return (
                 config.OFF_TOPIC_MESSAGE,
                 [],
-                "off_topic"
+                "off_topic",
+                []
             )
 
         # STEP 3: Determine document type filter
@@ -401,7 +454,8 @@ class ChatbotService:
                 return (
                     fallback_message,
                     [],
-                    question_category
+                    question_category,
+                    []
                 )
         except Exception as e:
             print(f"[ERROR] Retrieval error: {e}")
@@ -409,7 +463,8 @@ class ChatbotService:
                 "Sorry, I ran into an error retrieving information. "
                 "Please try again later or contact support.",
                 [],
-                question_category
+                question_category,
+                []
             )
 
         # Build knowledge base with page citations
@@ -455,11 +510,25 @@ class ChatbotService:
             response = self.llm.invoke(messages)
             answer = response.content
 
+            # If the model appended the generic fallback sentence but we have citations,
+            # remove the fallback to avoid redundant/contradictory text. The fallback
+            # is required when KNOWLEDGE lacks the requested info, but we already
+            # retrieved citations for this answer.
+            fallback_sentence = (
+                "I'm not able to find that information in the documents I have here. "
+                "Please contact your academic advisor or the Office of the Registrar for assistance."
+            )
+            if fallback_sentence in answer and citations and len(citations) > 0:
+                answer = answer.replace(fallback_sentence, '').strip()
+
             # Add policy disclaimer if this is a policy question
             if question_category == "academic_policy":
                 answer = answer + config.POLICY_DISCLAIMER
 
-            return answer, citations, question_category  # type: ignore
+            # Generate follow-up suggestions tailored to the user's context
+            followups = self._generate_followups(question, answer, conversation_history)
+
+            return answer, citations, question_category, followups  # type: ignore
 
         except Exception as e:
             print(f"[ERROR] LLM generation error: {e}")
@@ -467,7 +536,8 @@ class ChatbotService:
                 "Sorry, I encountered an error generating a response. "
                 "Please try again or contact your academic advisor.",
                 citations,
-                question_category
+                question_category,
+                []
             )
 
     def recommend_courses_from_schedule(self, schedule_summary: str, conversation_history: List[Dict[str, str]]) -> Tuple[str, List[Dict], str]:

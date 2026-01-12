@@ -9,9 +9,10 @@ interface MessageListProps {
   theme: Theme
   animationEnabled?: boolean
   animateMessageId?: number
+  onFollowupClick?: (text: string) => void
 }
 
-export default function MessageList({ messages, onFeedback, theme, animationEnabled, animateMessageId }: MessageListProps) {
+export default function MessageList({ messages, onFeedback, theme, animationEnabled, animateMessageId, onFollowupClick }: MessageListProps) {
   return (
     <div className="space-y-3">
       {messages.map((message) => (
@@ -22,6 +23,7 @@ export default function MessageList({ messages, onFeedback, theme, animationEnab
           theme={theme}
           animationEnabled={!!animationEnabled}
           animate={animateMessageId === message.id}
+          onFollowupClick={onFollowupClick}
         />
       ))}
     </div>

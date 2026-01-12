@@ -184,6 +184,7 @@ export default function ChatInterface({
         role: 'assistant',
         content: data.answer,
         citations: data.citations,
+        follow_ups: data.follow_ups || [],
         created_at: new Date().toISOString(),
       }
       setMessages(prev => [...prev, assistantMessage])
@@ -304,6 +305,7 @@ export default function ChatInterface({
         role: 'assistant',
         content: data.answer,
         citations: data.citations,
+        follow_ups: data.follow_ups || [],
         created_at: new Date().toISOString(),
       }
 
@@ -525,6 +527,7 @@ export default function ChatInterface({
           theme={theme}
           animationEnabled={animationEnabled}
           animateMessageId={animateMessageId}
+          onFollowupClick={(text: string) => sendMessage(text)}
         />
         
         {isLoading && (
