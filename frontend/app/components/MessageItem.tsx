@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Message, Theme } from '../types'
@@ -66,6 +66,7 @@ export default function MessageItem({ message, onFeedback, theme, animationEnabl
   const [flagReason, setFlagReason] = useState('')
   const [flagComment, setFlagComment] = useState('')
   const [citationsOpen, setCitationsOpen] = useState(false)
+  const markdownContentRef = useRef<HTMLDivElement>(null)
 
   const isUser = message.role === 'user'
 
@@ -93,9 +94,55 @@ export default function MessageItem({ message, onFeedback, theme, animationEnabl
     setPendingRating(null)
   }
 
+  const stripMarkdown = (markdown: string): string => {
+    return markdown
+      // Remove bold (**text** -> text)
+      .replace(/\*\*(.+?)\*\*/g, '$1')
+      // Remove italic (*text* -> text)
+      .replace(/\*(.+?)\*/g, '$1')
+      // Remove headers (# Header -> Header)
+      .replace(/^#+\s+/gm, '')
+      // Remove links ([text](url) -> text)
+      .replace(/\[(.+?)\]\(.+?\)/g, '$1')
+      // Remove code blocks (```code``` -> code)
+      .replace(/```[\s\S]*?```/g, (match) => {
+        return match.replace(/```/g, '').trim()
+      })
+      // Remove inline code (`code` -> code)
+      .replace(/`(.+?)`/g, '$1')
+      // Remove horizontal rules (---, ***, ___)
+      .replace(/^\s*([-*_])\s*\1\s*\1+\s*$/gm, '')
+      // Remove blockquotes (> text -> text)
+      .replace(/^\s*>\s+/gm, '')
+      // Remove list markers (-, *, +, digits.)
+      .replace(/^\s*[-*+]\s+/gm, '')
+      .replace(/^\s*\d+\.\s+/gm, '')
+      // Clean up extra whitespace
+      .replace(/\n\n+/g, '\n\n')
+      .trim()
+  }
+
   const copyToClipboard = async () => {
     try {
-      await navigator.clipboard.writeText(message.content)
+      if (markdownContentRef.current) {
+        const htmlContent = markdownContentRef.current.innerHTML
+        const plainText = stripMarkdown(message.content)
+        
+        const blob = new Blob([htmlContent], { type: 'text/html' })
+        const data = [
+          new ClipboardItem({
+            'text/html': blob,
+            'text/plain': new Blob([plainText], { type: 'text/plain' })
+          })
+        ]
+        
+        await navigator.clipboard.write(data)
+      } else {
+        // Fallback to plain text if ref is not available
+        const plainText = stripMarkdown(message.content)
+        await navigator.clipboard.writeText(plainText)
+      }
+      
       setIsCopied(true)
       setTimeout(() => setIsCopied(false), 2000)
     } catch (error) {
@@ -164,7 +211,7 @@ export default function MessageItem({ message, onFeedback, theme, animationEnabl
           }`}
         >
           {/* Renders the list syntax  (sections, bullets, numbered lists) to become HTML with nested hierarchy.*/}
-          <div className={`markdown-content relative ${isUser ? 'text-white' : theme === 'dark' ? 'text-gray-100' : 'text-gray-900'}`}>
+          <div ref={markdownContentRef} className={`markdown-content relative ${isUser ? 'text-white' : theme === 'dark' ? 'text-gray-100' : 'text-gray-900'}`}>
             <div className="leading-normal">
               <ReactMarkdown remarkPlugins={[remarkGfm]}>
                 {displayedContent}
