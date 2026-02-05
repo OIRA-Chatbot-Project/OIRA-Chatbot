@@ -533,7 +533,7 @@ class ChatbotService:
             # Handle no results
             if not docs:
                 fallback_message = (
-                    "I’m not seeing that information in the documents I have, but I’m happy to help with anything else. "
+                    "I’m not seeing that information in the documents I have, but I’m happy to help with anything else! "
                     "For official guidance and questions about how these policies apply to your specific situation, please consult with your academic advisor or the Office of the Registrar."
                 )
                 return (
