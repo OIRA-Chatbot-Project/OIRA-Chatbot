@@ -35,7 +35,6 @@ export interface SessionSummary {
   title: string
   hasMessages: boolean
   isTemporary?: boolean
-  pinned?: boolean
 }
 
 export interface ParsedCourse {

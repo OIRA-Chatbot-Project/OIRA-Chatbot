@@ -56,16 +56,6 @@ export const useSessionManager = (
     [persistSessions]
   )
 
-  const togglePinSession = useCallback(
-    (id: string) => {
-      persistSessions(prev =>
-        prev.map(session =>
-          session.id === id ? { ...session, pinned: !session.pinned } : session
-        )
-      )
-    },
-    [persistSessions]
-  )
 
   const switchSession = useCallback(
     (id: string) => {
@@ -155,7 +145,6 @@ export const useSessionManager = (
             timestamp: new Date(s.created_at).getTime(),
             title,
             hasMessages: s.has_messages,
-            pinned: storedSession?.pinned ?? false,
           }
         })
 
@@ -187,6 +176,5 @@ export const useSessionManager = (
     hydrateSessionTitles,
     loadUserSessions,
     renameSessionTitle,
-    togglePinSession,
   }
 }

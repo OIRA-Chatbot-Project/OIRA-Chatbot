@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from typing import Optional
 from sqlalchemy import func
 from pydantic import BaseModel
 from langchain_openai import ChatOpenAI
@@ -70,6 +71,39 @@ async def get_user_sessions(
         raise HTTPException(status_code=500, detail=f"Error retrieving sessions: {str(e)}")
 
 
+@router.delete("/{session_id}")
+async def delete_session(
+    session_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Delete a session and its messages for the authenticated user.
+    """
+    try:
+        clerk_user_id = get_user_id_from_token(current_user)
+        user = db.query(DBUser).filter(DBUser.clerk_user_id == clerk_user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        session = db.query(DBSession).filter(
+            DBSession.session_id == session_id,
+            DBSession.user_id == user.id
+        ).first()
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        db.query(DBMessage).filter(DBMessage.session_id == session_id).delete(synchronize_session=False)
+        db.delete(session)
+        db.commit()
+
+        return {"ok": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error deleting session: {str(e)}")
+
+
 class GenerateTitleRequest(BaseModel):
     """Request to generate a title for a session"""
     session_id: str
@@ -79,6 +113,11 @@ class GenerateTitleRequest(BaseModel):
 class GenerateTitleResponse(BaseModel):
     """Response with generated title"""
     title: str
+
+
+class UpdateSessionRequest(BaseModel):
+    """Update a session's title"""
+    title: Optional[str] = None
 
 
 @router.post("/generate-title", response_model=GenerateTitleResponse)
@@ -154,3 +193,40 @@ Title:"""
         print(f"[ERROR] Failed to generate title: {e}")
         raise HTTPException(status_code=500, detail=f"Error generating title: {str(e)}")
 
+
+@router.patch("/{session_id}")
+async def update_session(
+    session_id: str,
+    request: UpdateSessionRequest,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Update a session's title or pinned status.
+    """
+    try:
+        clerk_user_id = get_user_id_from_token(current_user)
+        user = db.query(DBUser).filter(DBUser.clerk_user_id == clerk_user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        session = db.query(DBSession).filter(
+            DBSession.session_id == session_id,
+            DBSession.user_id == user.id
+        ).first()
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        if request.title is not None:
+            title = request.title.strip()
+            if not title:
+                raise HTTPException(status_code=400, detail="Title cannot be empty")
+            session.title = title
+
+        db.commit()
+
+        return {"ok": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error updating session: {str(e)}")

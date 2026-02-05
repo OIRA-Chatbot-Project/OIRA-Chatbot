@@ -12,7 +12,7 @@ import {
   loadCurrentSessionId,
   clearLegacyStorage,
 } from "./utils/sessionStorage";
-import { initializeUserInBackend } from "./utils/api";
+import { initializeUserInBackend, deleteSession as deleteSessionApi, updateSession as updateSessionApi } from "./utils/api";
 import { useSessionManager } from "./utils/useSessionManager";
 
 export default function Home() {
@@ -33,7 +33,6 @@ export default function Home() {
     persistSessions,
     updateSessionTitle,
     renameSessionTitle,
-    togglePinSession,
     switchSession,
     markSessionHasMessages,
     hydrateSessionTitles,
@@ -103,14 +102,53 @@ export default function Home() {
   ]);
 
   const deleteSession = useCallback(
-    (id: string) => {
+    async (id: string) => {
+      try {
+        const token = await getToken();
+        if (!token) {
+          console.error("Failed to get authentication token");
+          return;
+        }
+        const ok = await deleteSessionApi(token, id);
+        if (!ok) {
+          console.error("Failed to delete session");
+          return;
+        }
+      } catch (error) {
+        console.error("Failed to delete session:", error);
+        return;
+      }
+
       persistSessions((prev) => prev.filter((session) => session.id !== id));
 
       if (id === sessionId) {
         startNewChat();
       }
     },
-    [persistSessions, sessionId, startNewChat]
+    [persistSessions, sessionId, startNewChat, getToken]
+  );
+
+  const renameSession = useCallback(
+    async (id: string, title: string) => {
+      try {
+        const token = await getToken();
+        if (!token) {
+          console.error("Failed to get authentication token");
+          return;
+        }
+        const ok = await updateSessionApi(token, id, { title });
+        if (!ok) {
+          console.error("Failed to rename session");
+          return;
+        }
+      } catch (error) {
+        console.error("Failed to rename session:", error);
+        return;
+      }
+
+      renameSessionTitle(id, title);
+    },
+    [getToken, renameSessionTitle]
   );
 
   // Load user sessions from backend - only after user is initialized
@@ -243,20 +281,12 @@ export default function Home() {
       }`}
     >
       <Sidebar
-        sessions={sessions
-          .filter((s) => !s.isTemporary)
-          .slice()
-          .sort((a, b) => {
-            const pinDiff = Number(Boolean(b.pinned)) - Number(Boolean(a.pinned));
-            if (pinDiff !== 0) return pinDiff;
-            return b.timestamp - a.timestamp;
-          })}
+        sessions={sessions.filter((s) => !s.isTemporary)}
         currentSessionId={sessionId}
         onNewChat={startNewChat}
         onSelectSession={switchSession}
         onDeleteSession={deleteSession}
-        onRenameSession={renameSessionTitle}
-        onPinSession={togglePinSession}
+        onRenameSession={renameSession}
         theme={theme}
         disableNewChat={isCreatingSession}
       />

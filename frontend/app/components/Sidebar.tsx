@@ -14,7 +14,6 @@ interface SidebarProps {
   onSelectSession: (id: string) => void
   onDeleteSession: (id: string) => void
   onRenameSession: (id: string, title: string) => void
-  onPinSession: (id: string) => void
   theme: Theme
   disableNewChat?: boolean
 }
@@ -26,7 +25,6 @@ export default function Sidebar({
   onSelectSession,
   onDeleteSession,
   onRenameSession,
-  onPinSession,
   theme,
   disableNewChat = false,
 }: SidebarProps) {
@@ -528,24 +526,11 @@ export default function Sidebar({
                     onRenameSession(activeMenuSessionId, nextTitle)
                   }
                 }}
-                className={`w-full text-left px-3 py-2 text-sm ${
-                  theme === 'dark' ? 'hover:bg-slate-800' : 'hover:bg-gray-50'
-                }`}
-              >
-                Rename
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setOpenMenuSessionId(null)
-                  setMenuPosition(null)
-                  onPinSession(activeMenuSessionId)
-                }}
                 className={`w-full text-left px-3 py-2 text-sm rounded-b-xl ${
                   theme === 'dark' ? 'hover:bg-slate-800' : 'hover:bg-gray-50'
                 }`}
               >
-                {activeSession?.pinned ? 'Unpin chat' : 'Pin chat'}
+                Rename
               </button>
             </div>
               )

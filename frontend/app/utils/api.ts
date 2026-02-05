@@ -58,3 +58,31 @@ export const initializeUserInBackend = async (
 
   return response.ok
 }
+
+export const deleteSession = async (token: string, sessionId: string): Promise<boolean> => {
+  const response = await fetch(`${API_URL}/sessions/${sessionId}`, {
+    method: 'DELETE',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+  })
+
+  return response.ok
+}
+
+export const updateSession = async (
+  token: string,
+  sessionId: string,
+  payload: { title?: string }
+): Promise<boolean> => {
+  const response = await fetch(`${API_URL}/sessions/${sessionId}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  })
+
+  return response.ok
+}
