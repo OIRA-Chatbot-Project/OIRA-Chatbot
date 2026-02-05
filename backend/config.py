@@ -22,11 +22,11 @@ CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "100"))
 USE_MULTI_STEP_QUERY = os.getenv("USE_MULTI_STEP_QUERY", "true").lower() == "true"
 
 # Retriever Configuration
-RETRIEVER_K = int(os.getenv("RETRIEVER_K", "8"))  # Number of documents to retrieve
-RETRIEVER_FETCH_K = int(os.getenv("RETRIEVER_FETCH_K", "50"))  # Candidates for MMR
+RETRIEVER_K = int(os.getenv("RETRIEVER_K", "12"))  # Number of documents to retrieve
+RETRIEVER_FETCH_K = int(os.getenv("RETRIEVER_FETCH_K", "80"))  # Candidates for MMR
 RETRIEVER_LAMBDA_MULT = float(os.getenv("RETRIEVER_LAMBDA_MULT", "0.4"))  # MMR diversity (0=diverse, 1=similar)
-MAX_MULTI_STEP_DOCS = int(os.getenv("MAX_MULTI_STEP_DOCS", "20"))  # Max docs for multi-step queries
-MIN_DOCS_PER_SUBQUERY = int(os.getenv("MIN_DOCS_PER_SUBQUERY", "3"))  # Minimum docs per sub-question
+MAX_MULTI_STEP_DOCS = int(os.getenv("MAX_MULTI_STEP_DOCS", "30"))  # Max docs for multi-step queries
+MIN_DOCS_PER_SUBQUERY = int(os.getenv("MIN_DOCS_PER_SUBQUERY", "4"))  # Minimum docs per sub-question
 
 # ChromaDB Configuration
 CHROMA_COLLECTION_NAME = os.getenv("CHROMA_COLLECTION_NAME", "bucknell_catalogue")

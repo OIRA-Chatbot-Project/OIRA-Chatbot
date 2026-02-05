@@ -32,6 +32,8 @@ export default function Home() {
     setIsTemporarySession,
     persistSessions,
     updateSessionTitle,
+    renameSessionTitle,
+    togglePinSession,
     switchSession,
     markSessionHasMessages,
     hydrateSessionTitles,
@@ -241,11 +243,20 @@ export default function Home() {
       }`}
     >
       <Sidebar
-        sessions={sessions.filter((s) => !s.isTemporary)}
+        sessions={sessions
+          .filter((s) => !s.isTemporary)
+          .slice()
+          .sort((a, b) => {
+            const pinDiff = Number(Boolean(b.pinned)) - Number(Boolean(a.pinned));
+            if (pinDiff !== 0) return pinDiff;
+            return b.timestamp - a.timestamp;
+          })}
         currentSessionId={sessionId}
         onNewChat={startNewChat}
         onSelectSession={switchSession}
         onDeleteSession={deleteSession}
+        onRenameSession={renameSessionTitle}
+        onPinSession={togglePinSession}
         theme={theme}
         disableNewChat={isCreatingSession}
       />

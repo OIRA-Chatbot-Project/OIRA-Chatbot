@@ -58,6 +58,38 @@ def classify_document_type(filename: str) -> str:
 COURSE_START_RE = re.compile(r'(?m)^(?P<code>[A-Z]{2,4}\\s?\\d{3}[A-Z]?)\\s*[:\\.-]\\s+')
 PAGE_MARKER_RE = re.compile(r'\\[\\[PAGE:(\\d+)\\]\\]')
 
+SECTION_PATTERNS = {
+    "freeman_core": [
+        "freeman college core curriculum",
+        "freeman college of management core curriculum",
+        "freeman college core requirements",
+    ],
+    "sequence": [
+        "recommended sequence",
+        "four-year plan",
+        "four year plan",
+        "first year",
+        "sophomore year",
+        "junior year",
+        "senior year",
+    ],
+    "major_requirements": [
+        "major requirements",
+        "business analytics major requirements",
+    ],
+}
+
+def assign_section_metadata(text: str) -> str:
+    """
+    Heuristic section tagging to help retrieval for sequence/core/requirements blocks.
+    Returns a section label or empty string if no match.
+    """
+    t = (text or "").lower()
+    for section, needles in SECTION_PATTERNS.items():
+        if any(n in t for n in needles):
+            return section
+    return ""
+
 def _get_page_for_offset(text: str, offset: int) -> int:
     """Return 0-based page number for a byte offset in a marker-annotated string."""
     matches = list(PAGE_MARKER_RE.finditer(text, 0, offset))
@@ -154,8 +186,19 @@ text_splitter = RecursiveCharacterTextSplitter(
 chunks = text_splitter.split_documents(raw_documents)
 print(f"Created {len(chunks)} chunks")
 
+# Tag sections on catalog chunks to improve retrieval for sequence/core curriculum questions
+for c in chunks:
+    if c.metadata.get("doc_type") == "catalog":
+        section = assign_section_metadata(c.page_content)
+        if section:
+            c.metadata["section"] = section
+
 # Add course-level documents on top of the regular chunks
 if course_docs:
+    for c in course_docs:
+        section = assign_section_metadata(c.page_content)
+        if section:
+            c.metadata["section"] = section
     chunks.extend(course_docs)
     print(f"Total chunks after adding course entries: {len(chunks)}")
 

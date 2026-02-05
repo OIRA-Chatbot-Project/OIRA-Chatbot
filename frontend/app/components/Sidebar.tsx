@@ -13,6 +13,8 @@ interface SidebarProps {
   onNewChat: () => void
   onSelectSession: (id: string) => void
   onDeleteSession: (id: string) => void
+  onRenameSession: (id: string, title: string) => void
+  onPinSession: (id: string) => void
   theme: Theme
   disableNewChat?: boolean
 }
@@ -23,6 +25,8 @@ export default function Sidebar({
   onNewChat,
   onSelectSession,
   onDeleteSession,
+  onRenameSession,
+  onPinSession,
   theme,
   disableNewChat = false,
 }: SidebarProps) {
@@ -35,6 +39,9 @@ export default function Sidebar({
   const [searchError, setSearchError] = useState<string | null>(null)
   const searchCacheRef = useRef(searchCache)
   const [isClient, setIsClient] = useState(false)
+  const [openMenuSessionId, setOpenMenuSessionId] = useState<string | null>(null)
+  const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null)
+  const menuContainerRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     searchCacheRef.current = searchCache
@@ -43,6 +50,18 @@ export default function Sidebar({
   useEffect(() => {
     setIsClient(true)
   }, [])
+
+  useEffect(() => {
+    if (!openMenuSessionId) return
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node
+      if (menuContainerRef.current && !menuContainerRef.current.contains(target)) {
+        setOpenMenuSessionId(null)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [openMenuSessionId])
 
   useEffect(() => {
     if (!isSearchOpen) return
@@ -102,22 +121,6 @@ export default function Sidebar({
       cancelled = true
     }
   }, [isSearchOpen, sessions])
-
-  const formatDate = (timestamp: number) => {
-    const date = new Date(timestamp)
-    const now = new Date()
-    const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24))
-
-    if (diffDays === 0) {
-      return 'Today'
-    } else if (diffDays === 1) {
-      return 'Yesterday'
-    } else if (diffDays < 7) {
-      return `${diffDays} days ago`
-    } else {
-      return date.toLocaleDateString()
-    }
-  }
 
   const normalizedQuery = searchQuery.trim().toLowerCase()
 
@@ -429,33 +432,41 @@ export default function Sidebar({
               <div className="flex items-start justify-between">
                 <div className="flex-1 min-w-0 pr-2">
                   <p
-                    className={`text-sm font-medium line-clamp-2 break-words leading-snug ${
+                    className={`text-sm font-medium truncate whitespace-nowrap leading-snug ${
                       theme === 'dark' ? 'text-white' : 'text-slate-800'
                     }`}
                     title={session.title || 'New Chat'}
                   >
                     {session.title || 'New Chat'}
                   </p>
-                  <p className={`text-xs mt-1.5 ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>
-                    {formatDate(session.timestamp)}
-                  </p>
                 </div>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    if (confirm('Delete this chat session?')) {
-                      onDeleteSession(session.id)
-                    }
-                  }}
-                  className={`opacity-0 group-hover:opacity-100 transition-all ml-2 ${
-                    theme === 'dark'
-                      ? 'text-slate-500 hover:text-red-400'
-                      : 'text-slate-400 hover:text-red-500'
-                  }`}
-                  title="Delete session"
-                >
-                  🗑️
-                </button>
+                <div ref={openMenuSessionId === session.id ? menuContainerRef : null} className="relative ml-2">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      const nextOpen = openMenuSessionId === session.id ? null : session.id
+                      setOpenMenuSessionId(nextOpen)
+                      if (nextOpen) {
+                        const rect = (e.currentTarget as HTMLButtonElement).getBoundingClientRect()
+                        setMenuPosition({
+                          top: rect.top + window.scrollY,
+                          left: rect.right + window.scrollX + 8,
+                        })
+                      } else {
+                        setMenuPosition(null)
+                      }
+                    }}
+                    className={`opacity-0 group-hover:opacity-100 transition-all px-2 py-1 rounded-md ${
+                      theme === 'dark'
+                        ? 'text-slate-500 hover:text-slate-200 hover:bg-slate-800/60'
+                        : 'text-slate-500 hover:text-slate-800 hover:bg-white'
+                    }`}
+                    title="More options"
+                    aria-label="More options"
+                  >
+                    ...
+                  </button>
+                </div>
               </div>
             </div>
           ))
@@ -478,6 +489,70 @@ export default function Sidebar({
       </div>
     </div>
       {searchOverlay}
+      {isClient && openMenuSessionId && menuPosition
+        ? createPortal(
+            (() => {
+              const activeMenuSessionId = openMenuSessionId as string
+              const activeSession = sessions.find(s => s.id === activeMenuSessionId)
+              return (
+                <div
+              className={`fixed z-[9999] w-40 rounded-xl border shadow-lg ${
+                theme === 'dark'
+                  ? 'bg-slate-900 border-slate-800 text-slate-200'
+                  : 'bg-white border-gray-200 text-slate-700'
+              }`}
+              style={{ top: menuPosition.top, left: menuPosition.left }}
+            >
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setOpenMenuSessionId(null)
+                  setMenuPosition(null)
+                  if (confirm('Delete this chat session?')) {
+                    onDeleteSession(activeMenuSessionId)
+                  }
+                }}
+                className={`w-full text-left px-3 py-2 text-sm rounded-t-xl ${
+                  theme === 'dark' ? 'hover:bg-slate-800' : 'hover:bg-gray-50'
+                }`}
+              >
+                Delete
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setOpenMenuSessionId(null)
+                  setMenuPosition(null)
+                  const nextTitle = window.prompt('Rename chat', activeSession?.title || '')
+                  if (nextTitle !== null) {
+                    onRenameSession(activeMenuSessionId, nextTitle)
+                  }
+                }}
+                className={`w-full text-left px-3 py-2 text-sm ${
+                  theme === 'dark' ? 'hover:bg-slate-800' : 'hover:bg-gray-50'
+                }`}
+              >
+                Rename
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setOpenMenuSessionId(null)
+                  setMenuPosition(null)
+                  onPinSession(activeMenuSessionId)
+                }}
+                className={`w-full text-left px-3 py-2 text-sm rounded-b-xl ${
+                  theme === 'dark' ? 'hover:bg-slate-800' : 'hover:bg-gray-50'
+                }`}
+              >
+                {activeSession?.pinned ? 'Unpin chat' : 'Pin chat'}
+              </button>
+            </div>
+              )
+            })(),
+            document.body
+          )
+        : null}
     </>
   )
 }

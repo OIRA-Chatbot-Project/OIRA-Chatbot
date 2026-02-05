@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { SessionSummary } from '../types'
 import { DEFAULT_SESSION_TITLE, generateSessionTitle, isPlaceholderTitle } from './session'
-import { saveSessionsToStorage, loadCurrentSessionId, saveCurrentSessionId } from './sessionStorage'
+import { saveSessionsToStorage, loadCurrentSessionId, saveCurrentSessionId, loadSessionsFromStorage } from './sessionStorage'
 import { fetchUserSessions, fetchSessionMessages } from './api'
 
 export const useSessionManager = (
@@ -39,6 +39,29 @@ export const useSessionManager = (
           }
           return { ...session, title: newTitle }
         })
+      )
+    },
+    [persistSessions]
+  )
+
+  const renameSessionTitle = useCallback(
+    (id: string, newTitle: string) => {
+      if (!newTitle.trim()) return
+      persistSessions(prev =>
+        prev.map(session =>
+          session.id === id ? { ...session, title: newTitle.trim() } : session
+        )
+      )
+    },
+    [persistSessions]
+  )
+
+  const togglePinSession = useCallback(
+    (id: string) => {
+      persistSessions(prev =>
+        prev.map(session =>
+          session.id === id ? { ...session, pinned: !session.pinned } : session
+        )
       )
     },
     [persistSessions]
@@ -117,12 +140,24 @@ export const useSessionManager = (
           return { shouldContinue: false }
         }
 
-        const formattedSessions = backendSessions.map(s => ({
-          id: s.session_id,
-          timestamp: new Date(s.created_at).getTime(),
-          title: s.title || DEFAULT_SESSION_TITLE,
-          hasMessages: s.has_messages,
-        }))
+        const stored = userId ? loadSessionsFromStorage(userId) : null
+        const storedMap = new Map((stored || []).map(s => [s.id, s]))
+
+        const formattedSessions = backendSessions.map(s => {
+          const storedSession = storedMap.get(s.session_id)
+          const storedTitle = storedSession?.title
+          const title =
+            storedTitle && !isPlaceholderTitle(storedTitle)
+              ? storedTitle
+              : s.title || DEFAULT_SESSION_TITLE
+          return {
+            id: s.session_id,
+            timestamp: new Date(s.created_at).getTime(),
+            title,
+            hasMessages: s.has_messages,
+            pinned: storedSession?.pinned ?? false,
+          }
+        })
 
         setSessions(formattedSessions)
         if (userId) {
@@ -151,5 +186,7 @@ export const useSessionManager = (
     markSessionHasMessages,
     hydrateSessionTitles,
     loadUserSessions,
+    renameSessionTitle,
+    togglePinSession,
   }
 }

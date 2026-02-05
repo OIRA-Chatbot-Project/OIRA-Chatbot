@@ -277,6 +277,21 @@ class ChatbotService:
         
         print(f"[INFO] Final document distribution: {dict(zip(range(1, num_subqueries+1), docs_count_per_query))}")
         return all_docs
+
+    def _merge_docs(self, base_docs: List, extra_docs: List) -> List:
+        """Merge document lists, de-duplicating by (source, page)."""
+        merged = list(base_docs)
+        seen = set()
+        for d in merged:
+            meta = d.metadata or {}
+            seen.add((meta.get("source", ""), meta.get("page", 0)))
+        for d in extra_docs:
+            meta = d.metadata or {}
+            key = (meta.get("source", ""), meta.get("page", 0))
+            if key not in seen:
+                seen.add(key)
+                merged.append(d)
+        return merged
     
     def _build_contextual_query(self, question: str, conversation_history: List[Dict[str, str]]) -> str:
         """
@@ -316,6 +331,48 @@ class ChatbotService:
             print(f"[WARNING] Contextualization failed: {e}. Using original question.")
         
         return question
+
+    def _is_sequence_question(self, question: str) -> bool:
+        """Heuristic check for questions asking about a major/course sequence or plan."""
+        q = question.lower()
+        return any(
+            key in q
+            for key in (
+                "sequence",
+                "four-year",
+                "four year",
+                "plan",
+                "recommended sequence",
+                "curriculum",
+            )
+        )
+
+    def _expand_sequence_queries(self, base_query: str, question: str) -> List[str]:
+        """
+        Expand sequence-style questions with related retrieval queries.
+        Keeps expansions short and catalog-focused to avoid off-topic noise.
+        """
+        expansions = [
+            base_query,
+            f"{base_query} recommended sequence",
+            f"{base_query} four-year plan",
+            f"{base_query} major requirements",
+            f"{base_query} core curriculum",
+            "culminating experience",
+        ]
+
+        q_lower = question.lower()
+        if "freeman" in q_lower or "business analytics" in q_lower or "bsba" in q_lower:
+            expansions.append("Freeman College core curriculum")
+
+        # De-duplicate while preserving order
+        seen = set()
+        deduped = []
+        for q in expansions:
+            if q not in seen:
+                seen.add(q)
+                deduped.append(q)
+        return deduped
 
     def _generate_followups(self, question: str, answer: str, conversation_history: List[Dict[str, str]]) -> List[str]:
         """
@@ -409,10 +466,13 @@ class ChatbotService:
 
             # Build contextual query for better follow-up handling
             search_query = self._build_contextual_query(question, conversation_history)
+            print(f"[INFO] Retrieval start | category={question_category} | multi_step={use_multi_step}")
+            print(f"[INFO] Search query: {search_query}")
 
             # STEP 4: Decompose query if needed and enabled
             if use_multi_step:
                 sub_questions = self._decompose_query(search_query)
+                print(f"[INFO] Sub-questions: {len(sub_questions)}")
 
                 # Log decomposition for debugging
                 if len(sub_questions) > 1:
@@ -427,6 +487,14 @@ class ChatbotService:
                     if len(sub_questions) >= 4:
                         print(f"[WARNING] High number of sub-questions ({len(sub_questions)}). Results may be limited per topic.")
 
+                # Expand sequence questions for broader recall
+                if question_category == "course_catalog" and self._is_sequence_question(question):
+                    expanded = self._expand_sequence_queries(search_query, question)
+                    sub_questions = sub_questions + expanded
+                    # Cap to avoid over-fetching
+                    if len(sub_questions) > 8:
+                        sub_questions = sub_questions[:8]
+
                 # Retrieve documents for all sub-questions WITH FILTERING
                 docs = self._retrieve_for_subqueries(sub_questions, doc_type_filter)
             else:
@@ -439,6 +507,28 @@ class ChatbotService:
                     )
                 else:
                     docs = self.retriever.invoke(search_query)
+            print(f"[INFO] Retrieved docs: {len(docs)}")
+
+            # Sequence questions: boost likely sections (core curriculum / sequence guidance)
+            if question_category == "course_catalog" and self._is_sequence_question(question):
+                section_filters = [
+                    {"section": "freeman_core"},
+                    {"section": "sequence"},
+                ]
+                boosted_docs = []
+                for f in section_filters:
+                    filt = {"$and": [{"doc_type": "catalog"}, f]}
+                    boosted_docs.extend(
+                        self.vector_store.similarity_search(
+                            search_query,
+                            k=max(6, config.RETRIEVER_K // 2),
+                            filter=filt
+                        )
+                    )
+                if boosted_docs:
+                    docs = self._merge_docs(docs, boosted_docs)
+                    print(f"[INFO] Boosted docs added: {len(boosted_docs)}")
+                    print(f"[INFO] Retrieved docs (after boost): {len(docs)}")
 
             # Handle no results
             if not docs:
@@ -464,6 +554,7 @@ class ChatbotService:
 
         # Build knowledge base with page citations
         knowledge = self._prepare_knowledge(docs)
+        print(f"[INFO] Knowledge length: {len(knowledge)}")
 
         # Build citations list for API response
         citations = []

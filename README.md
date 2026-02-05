@@ -95,6 +95,11 @@ If you prefer to run backend and frontend separately:
    npm run dev
    ```
 
+
+   Move to chunking improvements (to keep list/table blocks intact).
+
+
+
 ## 🎯 Features
 
 - 💬 RAG-powered chatbot with course catalog knowledge
