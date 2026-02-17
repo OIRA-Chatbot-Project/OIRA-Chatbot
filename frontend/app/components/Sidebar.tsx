@@ -40,6 +40,7 @@ export default function Sidebar({
   const [openMenuSessionId, setOpenMenuSessionId] = useState<string | null>(null)
   const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null)
   const menuContainerRef = useRef<HTMLDivElement | null>(null)
+  const menuPortalRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     searchCacheRef.current = searchCache
@@ -53,6 +54,9 @@ export default function Sidebar({
     if (!openMenuSessionId) return
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Node
+      if (menuPortalRef.current && menuPortalRef.current.contains(target)) {
+        return
+      }
       if (menuContainerRef.current && !menuContainerRef.current.contains(target)) {
         setOpenMenuSessionId(null)
       }
@@ -403,7 +407,7 @@ export default function Sidebar({
       </div>
 
       {/* Sessions List */}
-      <div className="flex-1 overflow-y-auto p-4 scrollbar-thin space-y-3">
+      <div className="flex-1 overflow-y-auto p-4 scrollbar-thin space-y-0">
         {sessions.length === 0 ? (
           <div
             className={`text-center text-sm mt-8 ${
@@ -416,7 +420,7 @@ export default function Sidebar({
           sessions.map((session) => (
             <div
               key={session.id}
-              className={`group relative rounded-2xl p-2 cursor-pointer transition-all border backdrop-blur ${
+              className={`group relative rounded-2xl p-1.5 cursor-pointer transition-all border backdrop-blur ${
                 session.id === currentSessionId
                   ? theme === 'dark'
                     ? 'bg-gradient-to-r from-slate-900 to-slate-800 border-indigo-500/40 shadow-lg shadow-indigo-900/40'
@@ -494,13 +498,14 @@ export default function Sidebar({
               const activeSession = sessions.find(s => s.id === activeMenuSessionId)
               return (
                 <div
-              className={`fixed z-[9999] w-40 rounded-xl border shadow-lg ${
-                theme === 'dark'
-                  ? 'bg-slate-900 border-slate-800 text-slate-200'
-                  : 'bg-white border-gray-200 text-slate-700'
-              }`}
-              style={{ top: menuPosition.top, left: menuPosition.left }}
-            >
+                  ref={menuPortalRef}
+                  className={`fixed z-[9999] w-40 rounded-xl border shadow-lg ${
+                    theme === 'dark'
+                      ? 'bg-slate-900 border-slate-800 text-slate-200'
+                      : 'bg-white border-gray-200 text-slate-700'
+                  }`}
+                  style={{ top: menuPosition.top, left: menuPosition.left }}
+                >
               <button
                 onClick={(e) => {
                   e.stopPropagation()
