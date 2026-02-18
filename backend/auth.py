@@ -51,13 +51,13 @@ def verify_clerk_token(token: str) -> dict:
         HTTPException: If token is invalid or verification fails
     """
     try:
-        # For development: If using secret key directly
+        # For development: If using secret key directly (no JWKS available in dev)
         if CLERK_SECRET_KEY:
-            # Decode without verification for development
-            # In production, you should verify with JWKS
+            # In dev mode without JWKS, decode with minimal verification
+            # SECURITY NOTE: Only for local development. Production should use JWKS.
             decoded = jwt.decode(
                 token,
-                options={"verify_signature": False}  # For development only
+                options={"verify_signature": False}  # Dev mode only - JWKS not available
             )
             return decoded
         

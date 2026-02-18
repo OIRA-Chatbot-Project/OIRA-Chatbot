@@ -9,6 +9,7 @@ import asyncio
 import config
 from prompts import get_decompose_prompt, get_user_prompt, get_contextualize_prompt, get_question_classifier_prompt, SYSTEM_PROMPT
 from logger import get_logger
+from utils import extract_json_from_text, extract_json_array_from_text
 
 logger = get_logger(__name__)
 
@@ -87,13 +88,9 @@ class ChatbotService:
             response = self.classifier_llm.invoke(classifier_prompt)
             response_text = response.content.strip()
 
-            # Extract JSON
-            json_start = response_text.find('{')
-            json_end = response_text.rfind('}') + 1
-            if json_start >= 0 and json_end > json_start:
-                json_str = response_text[json_start:json_end]
-                data = json.loads(json_str)
-
+            # Extract JSON using shared utility
+            data = extract_json_from_text(response_text)
+            if data:
                 category = data.get("category", "course_catalog")
 
                 # Validate category
@@ -104,7 +101,7 @@ class ChatbotService:
                     logger.warning(f"Invalid category '{category}', defaulting to 'course_catalog'")
                     return "course_catalog"
 
-        except (json.JSONDecodeError, KeyError, AttributeError) as e:
+        except Exception as e:
             logger.warning(f"Question classification failed: {e}. Defaulting to 'course_catalog'")
 
         # Fallback to catalog (safer than rejecting)
@@ -125,9 +122,8 @@ class ChatbotService:
         # Clean filename for URL (remove spaces, special chars)
         url_safe_filename = source_filename.replace(" ", "%20")
 
-        # For now, all PDFs are served from same endpoint with different filenames
-        # Frontend should handle routing to correct PDF
-        return f"http://localhost:3000/{url_safe_filename}#page={page}"
+        # Use configurable PDF base URL instead of hardcoded localhost
+        return f"{config.PDF_BASE_URL}/{url_safe_filename}#page={page}"
 
     def _prepare_knowledge(self, docs) -> str:
         """
@@ -162,13 +158,9 @@ class ChatbotService:
             response = self.decompose_llm.invoke(decompose_prompt)
             response_text = response.content.strip()
             
-            # Try to extract JSON even if there's extra text
-            json_start = response_text.find('{')
-            json_end = response_text.rfind('}') + 1
-            if json_start >= 0 and json_end > json_start:
-                json_str = response_text[json_start:json_end]
-                data = json.loads(json_str)
-                
+            # Extract JSON using shared utility
+            data = extract_json_from_text(response_text)
+            if data:
                 # Handle different response types
                 if data.get("type") == "simple" or not data.get("sub_questions"):
                     return [question]
@@ -185,7 +177,7 @@ class ChatbotService:
                         sub_questions = sub_questions[:5]
                     return sub_questions
 
-        except (json.JSONDecodeError, KeyError, AttributeError) as e:
+        except Exception as e:
             logger.warning(f"Query decomposition failed: {e}. Using original question.")
         
         # Fallback to original question
@@ -344,12 +336,9 @@ class ChatbotService:
             response = await self.classifier_llm.ainvoke(classifier_prompt)
             response_text = response.content.strip()
 
-            json_start = response_text.find('{')
-            json_end = response_text.rfind('}') + 1
-            if json_start >= 0 and json_end > json_start:
-                json_str = response_text[json_start:json_end]
-                data = json.loads(json_str)
-
+            # Extract JSON using shared utility
+            data = extract_json_from_text(response_text)
+            if data:
                 category = data.get("category", "course_catalog")
                 if category in ["course_catalog", "academic_policy", "off_topic"]:
                     logger.info(f"Question classified as: {category}")
@@ -358,7 +347,7 @@ class ChatbotService:
                     logger.warning(f"Invalid category '{category}', defaulting to 'course_catalog'")
                     return "course_catalog"
 
-        except (json.JSONDecodeError, KeyError, AttributeError) as e:
+        except Exception as e:
             logger.warning(f"Question classification failed: {e}. Defaulting to 'course_catalog'")
 
         return "course_catalog"
@@ -492,18 +481,14 @@ class ChatbotService:
             resp = self.decompose_llm.invoke(followup_prompt)
             resp_text = resp.content.strip()
 
-            # Extract JSON array from any surrounding text
-            json_start = resp_text.find('[')
-            json_end = resp_text.rfind(']') + 1
-            if json_start >= 0 and json_end > json_start:
-                arr_str = resp_text[json_start:json_end]
-                data = json.loads(arr_str)
-                if isinstance(data, list):
-                    # Clean and limit to 5
-                    suggestions = [str(s).strip() for s in data if isinstance(s, (str,))]
-                    if len(suggestions) > 5:
-                        suggestions = suggestions[:5]
-                    return suggestions
+            # Extract JSON array using shared utility
+            suggestions = extract_json_array_from_text(resp_text)
+            if suggestions:
+                # Clean and limit to 5
+                suggestions = [str(s).strip() for s in suggestions if isinstance(s, (str,))]
+                if len(suggestions) > 5:
+                    suggestions = suggestions[:5]
+                return suggestions
         except Exception as e:
             logger.warning(f"Follow-up generation failed: {e}")
 

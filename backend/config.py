@@ -38,6 +38,9 @@ API_DESCRIPTION = "API for Bucknell University course catalog chatbot"
 # CORS Configuration
 ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:3001").split(",")
 
+# PDF Base URL Configuration
+PDF_BASE_URL = os.getenv("PDF_BASE_URL", "http://localhost:3000")
+
 # Question Classification Configuration
 QUESTION_CLASSIFIER_TEMPERATURE = float(os.getenv("QUESTION_CLASSIFIER_TEMPERATURE", "0.1"))
 ENABLE_OFF_TOPIC_DETECTION = os.getenv("ENABLE_OFF_TOPIC_DETECTION", "true").lower() == "true"

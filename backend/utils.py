@@ -4,14 +4,18 @@ Consolidates duplicate code patterns from route files.
 """
 
 import re
+import json
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Dict, Any
+from logger import get_logger
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from database import Session as DBSession, User as DBUser
 from auth import get_user_id_from_token
+
+logger = get_logger(__name__)
 
 
 def get_utc_now() -> datetime:
@@ -103,9 +107,63 @@ def clean_answer(answer: str) -> str:
         return answer
 
 
+def extract_json_from_text(text: str, default: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
+    """
+    Extract and parse JSON object from text that may contain other content.
+    This consolidates the repeated pattern of finding '{' and '}' in LLM responses.
+    
+    Args:
+        text: Text that may contain a JSON object
+        default: Default value to return if extraction fails
+    
+    Returns:
+        Parsed JSON dict, or default value if extraction/parsing fails
+    """
+    try:
+        # Find JSON boundaries
+        json_start = text.find('{')
+        json_end = text.rfind('}') + 1
+        
+        if json_start >= 0 and json_end > json_start:
+            json_str = text[json_start:json_end]
+            return json.loads(json_str)
+    except (json.JSONDecodeError, ValueError, AttributeError) as e:
+        logger.warning(f"JSON extraction failed: {e}")
+    
+    return default
+
+
+def extract_json_array_from_text(text: str, default: Optional[list] = None) -> Optional[list]:
+    """
+    Extract and parse JSON array from text that may contain other content.
+    
+    Args:
+        text: Text that may contain a JSON array
+        default: Default value to return if extraction fails
+    
+    Returns:
+        Parsed JSON list, or default value if extraction/parsing fails
+    """
+    try:
+        # Find JSON array boundaries
+        json_start = text.find('[')
+        json_end = text.rfind(']') + 1
+        
+        if json_start >= 0 and json_end > json_start:
+            json_str = text[json_start:json_end]
+            data = json.loads(json_str)
+            if isinstance(data, list):
+                return data
+    except (json.JSONDecodeError, ValueError, AttributeError) as e:
+        logger.warning(f"JSON array extraction failed: {e}")
+    
+    return default or []
+
+
 def get_conversation_history(db: Session, session_id: str, before_message_id: int, limit: int = 6) -> list:
     """
     Get conversation history for a session, formatted for the chatbot service.
+    Optimized to fetch only needed fields instead of full message objects.
 
     Args:
         db: Database session
@@ -118,11 +176,13 @@ def get_conversation_history(db: Session, session_id: str, before_message_id: in
     """
     from database import Message as DBMessage
 
-    history_messages = db.query(DBMessage).filter(
+    # Optimized query: fetch only role and content fields
+    history_messages = db.query(DBMessage.role, DBMessage.content).filter(
         DBMessage.session_id == session_id,
         DBMessage.id < before_message_id
     ).order_by(DBMessage.created_at.desc()).limit(limit).all()
 
+    # Convert tuples to dicts and reverse to chronological order
     return [
         {"role": msg.role, "content": msg.content}
         for msg in reversed(history_messages)
