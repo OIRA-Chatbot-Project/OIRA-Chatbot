@@ -485,7 +485,7 @@ class ChatbotService:
             suggestions = extract_json_array_from_text(resp_text)
             if suggestions:
                 # Clean and limit to 5
-                suggestions = [str(s).strip() for s in suggestions if isinstance(s, str)]
+                suggestions = [s.strip() for s in suggestions if isinstance(s, str)]
                 if len(suggestions) > 5:
                     suggestions = suggestions[:5]
                 return suggestions
