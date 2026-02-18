@@ -184,6 +184,6 @@ def get_conversation_history(db: Session, session_id: str, before_message_id: in
 
     # Convert tuples to dicts and reverse to chronological order
     return [
-        {"role": msg.role, "content": msg.content}
+        {"role": msg[0], "content": msg[1]}
         for msg in reversed(history_messages)
     ]
