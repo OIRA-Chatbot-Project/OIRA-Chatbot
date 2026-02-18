@@ -11,12 +11,10 @@ from uuid import uuid4
 from dotenv import load_dotenv
 from langchain_community.document_loaders import PyPDFDirectoryLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_core.documents import Document
 from langchain_openai.embeddings import OpenAIEmbeddings
 from langchain_chroma import Chroma
 import config
 import os
-import re
 
 load_dotenv()
 
@@ -55,67 +53,6 @@ def classify_document_type(filename: str) -> str:
     print(f"[WARNING] Could not classify '{filename}', defaulting to 'policy'")
     return "policy"
 
-COURSE_START_RE = re.compile(r'(?m)^(?P<code>[A-Z]{2,4}\\s?\\d{3}[A-Z]?)\\s*[:\\.-]\\s+')
-PAGE_MARKER_RE = re.compile(r'\\[\\[PAGE:(\\d+)\\]\\]')
-
-def _get_page_for_offset(text: str, offset: int) -> int:
-    """Return 0-based page number for a byte offset in a marker-annotated string."""
-    matches = list(PAGE_MARKER_RE.finditer(text, 0, offset))
-    if not matches:
-        return 0
-    return int(matches[-1].group(1))
-
-def extract_course_documents(catalog_docs: list) -> list:
-    """
-    Extract course-level documents from the catalog so each course entry is its own chunk.
-    This reduces course-title/description bleed between adjacent courses.
-    """
-    if not catalog_docs:
-        return []
-
-    catalog_docs_sorted = sorted(catalog_docs, key=lambda d: d.metadata.get("page", 0))
-    source_path = catalog_docs_sorted[0].metadata.get("source", "catalog.pdf")
-
-    # Build a single text blob with page markers for citation alignment.
-    parts = []
-    for d in catalog_docs_sorted:
-        page = d.metadata.get("page", 0)
-        parts.append(f"\n[[PAGE:{page}]]\n{d.page_content}\n")
-    catalog_text = "\n".join(parts)
-
-    matches = list(COURSE_START_RE.finditer(catalog_text))
-    if not matches:
-        print("[WARNING] No course entries detected in catalog.")
-        return []
-
-    course_docs = []
-    for i, m in enumerate(matches):
-        start = m.start()
-        end = matches[i + 1].start() if i + 1 < len(matches) else len(catalog_text)
-        chunk = catalog_text[start:end]
-        page = _get_page_for_offset(catalog_text, start)
-        code = m.group("code").replace("  ", " ").strip()
-
-        cleaned = PAGE_MARKER_RE.sub("", chunk).strip()
-        cleaned = re.sub(r'\n{3,}', '\n\n', cleaned)
-        if len(cleaned) < 40:
-            continue
-
-        course_docs.append(
-            Document(
-                page_content=cleaned,
-                metadata={
-                    "source": source_path,
-                    "page": page,
-                    "doc_type": "catalog",
-                    "course_code": code,
-                },
-            )
-        )
-
-    print(f"Extracted {len(course_docs)} course entries from catalog.")
-    return course_docs
-
 #  Load PDFs
 # PyPDFDirectoryLoader automatically adds metadata:
 #   doc.metadata["source"] == filepath
@@ -138,10 +75,6 @@ print(f"Document classification:")
 print(f"  - Catalog pages: {doc_type_counts['catalog']}")
 print(f"  - Policy pages: {doc_type_counts['policy']}")
 
-# Extract course-level docs from catalog for better precision
-catalog_docs = [d for d in raw_documents if d.metadata.get("doc_type") == "catalog"]
-course_docs = extract_course_documents(catalog_docs)
-
 #  Split into chunks 
 # Larger chunks so course titles, prerequisites, and rules stay together
 text_splitter = RecursiveCharacterTextSplitter(
@@ -153,11 +86,6 @@ text_splitter = RecursiveCharacterTextSplitter(
 
 chunks = text_splitter.split_documents(raw_documents)
 print(f"Created {len(chunks)} chunks")
-
-# Add course-level documents on top of the regular chunks
-if course_docs:
-    chunks.extend(course_docs)
-    print(f"Total chunks after adding course entries: {len(chunks)}")
 
 # Verify doc_type is preserved in chunks
 chunks_with_type = sum(1 for c in chunks if "doc_type" in c.metadata)
