@@ -612,9 +612,19 @@ class ChatbotService:
             # Handle no results
             if not docs:
                 fallback_message = (
+<<<<<<< HEAD
                     "I’m not seeing that information in the documents I have, but I’m happy to help with anything else! "
                     "For official guidance and questions about how these policies apply to your specific situation, please consult with your academic advisor or the Office of the Registrar."
+=======
+                    "I couldn't retrieve relevant information from the documents. "
+                    "Please try rephrasing your question or contact your academic advisor for assistance."
+>>>>>>> 9055fab6d8e513dcf71c06c576cf8828fa8ccf31
                 )
+                if question_category == "academic_policy":
+                    fallback_message = (
+                        "I couldn't find relevant policy information. "
+                        "Please contact the Office of the Registrar or your academic advisor for guidance on this policy question."
+                    )
                 return (
                     fallback_message,
                     [],
@@ -672,29 +682,25 @@ class ChatbotService:
             ]
 
             response = self.llm.invoke(messages)
-            answer = (response.content or "").strip()
+            answer = response.content
 
             # If the model appended the generic fallback sentence but we have citations,
             # remove the fallback to avoid redundant/contradictory text. The fallback
             # is required when KNOWLEDGE lacks the requested info, but we already
             # retrieved citations for this answer.
             fallback_sentence = (
-                "I’m not seeing that information in the documents I have, but I’m happy to help with anything else!"
-                "For official guidance and questions about how these policies apply to your specific situation, please consult with your academic advisor or the Office of the Registrar.")
-            if not answer:
-                answer = fallback_sentence
-            elif fallback_sentence in answer and citations and len(citations) > 0:
-                if answer.strip() != fallback_sentence:
-                    answer = answer.replace(fallback_sentence, '').strip()
-                if not answer:
-                    answer = fallback_sentence
+                "I'm not able to find that information in the documents I have here. "
+                "Please contact your academic advisor or the Office of the Registrar for assistance."
+            )
+            if fallback_sentence in answer and citations and len(citations) > 0:
+                answer = answer.replace(fallback_sentence, '').strip()
 
             # Add policy disclaimer if this is a policy question
-            if question_category == "academic_policy" and answer != fallback_sentence:
+            if question_category == "academic_policy":
                 answer = answer + config.POLICY_DISCLAIMER
 
             # Generate follow-up suggestions tailored to the user's context
-            followups = [] if answer == fallback_sentence else self._generate_followups(question, answer, conversation_history)
+            followups = self._generate_followups(question, answer, conversation_history)
 
             return answer, citations, question_category, followups  # type: ignore
 

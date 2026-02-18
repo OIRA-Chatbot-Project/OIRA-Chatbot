@@ -11,12 +11,10 @@ from uuid import uuid4
 from dotenv import load_dotenv
 from langchain_community.document_loaders import PyPDFDirectoryLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_core.documents import Document
 from langchain_openai.embeddings import OpenAIEmbeddings
 from langchain_chroma import Chroma
 import config
 import os
-import re
 
 load_dotenv()
 
@@ -55,6 +53,7 @@ def classify_document_type(filename: str) -> str:
     print(f"[WARNING] Could not classify '{filename}', defaulting to 'policy'")
     return "policy"
 
+<<<<<<< HEAD
 COURSE_START_RE = re.compile(r'(?m)^(?P<code>[A-Z]{2,4}\\s?\\d{3}[A-Z]?)\\s*[:\\.-]\\s+')
 PAGE_MARKER_RE = re.compile(r'\\[\\[PAGE:(\\d+)\\]\\]')
 
@@ -148,6 +147,8 @@ def extract_course_documents(catalog_docs: list) -> list:
     print(f"Extracted {len(course_docs)} course entries from catalog.")
     return course_docs
 
+=======
+>>>>>>> 9055fab6d8e513dcf71c06c576cf8828fa8ccf31
 #  Load PDFs
 # PyPDFDirectoryLoader automatically adds metadata:
 #   doc.metadata["source"] == filepath
@@ -170,10 +171,6 @@ print(f"Document classification:")
 print(f"  - Catalog pages: {doc_type_counts['catalog']}")
 print(f"  - Policy pages: {doc_type_counts['policy']}")
 
-# Extract course-level docs from catalog for better precision
-catalog_docs = [d for d in raw_documents if d.metadata.get("doc_type") == "catalog"]
-course_docs = extract_course_documents(catalog_docs)
-
 #  Split into chunks 
 # Larger chunks so course titles, prerequisites, and rules stay together
 text_splitter = RecursiveCharacterTextSplitter(
@@ -186,6 +183,7 @@ text_splitter = RecursiveCharacterTextSplitter(
 chunks = text_splitter.split_documents(raw_documents)
 print(f"Created {len(chunks)} chunks")
 
+<<<<<<< HEAD
 # Tag sections on catalog chunks to improve retrieval for sequence/core curriculum questions
 for c in chunks:
     if c.metadata.get("doc_type") == "catalog":
@@ -202,6 +200,8 @@ if course_docs:
     chunks.extend(course_docs)
     print(f"Total chunks after adding course entries: {len(chunks)}")
 
+=======
+>>>>>>> 9055fab6d8e513dcf71c06c576cf8828fa8ccf31
 # Verify doc_type is preserved in chunks
 chunks_with_type = sum(1 for c in chunks if "doc_type" in c.metadata)
 print(f"Chunks with doc_type metadata: {chunks_with_type}/{len(chunks)}")
