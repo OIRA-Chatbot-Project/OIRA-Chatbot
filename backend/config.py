@@ -13,20 +13,19 @@ DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./chatbot.db")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 OPENAI_TEMPERATURE = float(os.getenv("OPENAI_TEMPERATURE", "0.5"))
-EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-3-large")
+EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")  # Optimized for speed
 
 # RAG Configuration
-NUM_RETRIEVAL_RESULTS = int(os.getenv("NUM_RETRIEVAL_RESULTS", "5"))
 CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "300"))
 CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "100"))
 USE_MULTI_STEP_QUERY = os.getenv("USE_MULTI_STEP_QUERY", "true").lower() == "true"
 
-# Retriever Configuration
-RETRIEVER_K = int(os.getenv("RETRIEVER_K", "12"))  # Number of documents to retrieve
-RETRIEVER_FETCH_K = int(os.getenv("RETRIEVER_FETCH_K", "80"))  # Candidates for MMR
+# Retriever Configuration (Optimized for performance)
+RETRIEVER_K = int(os.getenv("RETRIEVER_K", "8"))  # Number of documents to retrieve (reduced from 12)
+RETRIEVER_FETCH_K = int(os.getenv("RETRIEVER_FETCH_K", "40"))  # Candidates for MMR (reduced from 80)
 RETRIEVER_LAMBDA_MULT = float(os.getenv("RETRIEVER_LAMBDA_MULT", "0.4"))  # MMR diversity (0=diverse, 1=similar)
-MAX_MULTI_STEP_DOCS = int(os.getenv("MAX_MULTI_STEP_DOCS", "30"))  # Max docs for multi-step queries
-MIN_DOCS_PER_SUBQUERY = int(os.getenv("MIN_DOCS_PER_SUBQUERY", "4"))  # Minimum docs per sub-question
+MAX_MULTI_STEP_DOCS = int(os.getenv("MAX_MULTI_STEP_DOCS", "20"))  # Max docs for multi-step queries (reduced from 30)
+MIN_DOCS_PER_SUBQUERY = int(os.getenv("MIN_DOCS_PER_SUBQUERY", "3"))  # Minimum docs per sub-question (reduced from 4)
 
 # ChromaDB Configuration
 CHROMA_COLLECTION_NAME = os.getenv("CHROMA_COLLECTION_NAME", "bucknell_catalogue")

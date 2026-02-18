@@ -1,12 +1,18 @@
 'use client'
 
-import { useState, useEffect, useRef, ChangeEvent } from 'react'
+import { useState, useEffect, useRef, ChangeEvent, useCallback } from 'react'
 import { useAuth } from '@clerk/nextjs'
 import MessageList from './MessageList'
 import MessageInput from './MessageInput'
-import { Message, Theme, ScheduleUploadResponse } from '../types'
+import { Message, Theme, ScheduleUploadResponse, Citation } from '../types'
 import { API_URL } from '../utils/config'
 import { generateSessionTitle } from '../utils/session'
+import {
+  sendChatMessageStreaming,
+  fetchFollowUps,
+  StreamMetadataEvent,
+  StreamDoneEvent
+} from '../utils/api'
 
 interface ChatInterfaceProps {
   sessionId: string
@@ -42,6 +48,12 @@ export default function ChatInterface({
   const [isUploadingSchedule, setIsUploadingSchedule] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [isStreaming, setIsStreaming] = useState(false)
+  const streamingMessageRef = useRef<{ id: number; content: string; citations: Citation[] }>({
+    id: 0,
+    content: '',
+    citations: []
+  })
 
   useEffect(() => {
     // Load conversation history when session changes
@@ -133,6 +145,32 @@ export default function ChatInterface({
     }
   }
 
+  // Poll for follow-ups after streaming completes
+  const pollFollowUps = useCallback(async (messageId: number, maxAttempts: number = 5) => {
+    const token = await getToken()
+    if (!token) return
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      // Wait before polling (increasing delay)
+      await new Promise(resolve => setTimeout(resolve, 500 + attempt * 300))
+
+      try {
+        const result = await fetchFollowUps(token, messageId)
+        if (result.ready && result.follow_ups.length > 0) {
+          // Update the message with follow-ups
+          setMessages(prev =>
+            prev.map(msg =>
+              msg.id === messageId ? { ...msg, follow_ups: result.follow_ups } : msg
+            )
+          )
+          return
+        }
+      } catch (e) {
+        console.error('Failed to fetch follow-ups:', e)
+      }
+    }
+  }, [getToken])
+
   const sendMessage = async (content: string) => {
     // Add user message to UI
     const userMessage: Message = {
@@ -148,54 +186,93 @@ export default function ChatInterface({
       return next
     })
     setIsLoading(true)
+    setIsStreaming(true)
     setError(null)
     const hasExistingUserMessage = messages.some(msg => msg.role === 'user')
     const isFirstMessage = !hasExistingUserMessage
+
+    // Initialize streaming message ref
+    const tempId = Date.now() + 1
+    streamingMessageRef.current = { id: tempId, content: '', citations: [] }
+
+    // Add placeholder assistant message for streaming
+    const placeholderMessage: Message = {
+      id: tempId,
+      role: 'assistant',
+      content: '',
+      citations: [],
+      follow_ups: [],
+      created_at: new Date().toISOString(),
+    }
+    setMessages(prev => [...prev, placeholderMessage])
 
     try {
       const token = await getToken()
       if (!token) {
         setError('Authentication required')
         setIsLoading(false)
+        setIsStreaming(false)
         return
       }
 
-      const response = await fetch(`${API_URL}/chat`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
+      let finalMessageId = tempId
+
+      await sendChatMessageStreaming(token, sessionId, content, {
+        onMetadata: (event: StreamMetadataEvent) => {
+          // Update citations immediately
+          streamingMessageRef.current.citations = event.citations as Citation[]
+          setMessages(prev =>
+            prev.map(msg =>
+              msg.id === tempId
+                ? { ...msg, citations: event.citations as Citation[] }
+                : msg
+            )
+          )
         },
-        body: JSON.stringify({
-          session_id: sessionId,
-          message: content,
-        }),
+
+        onToken: (tokenContent: string) => {
+          // Append token to streaming content
+          streamingMessageRef.current.content += tokenContent
+          setMessages(prev =>
+            prev.map(msg =>
+              msg.id === tempId
+                ? { ...msg, content: streamingMessageRef.current.content }
+                : msg
+            )
+          )
+        },
+
+        onDone: (event: StreamDoneEvent) => {
+          finalMessageId = event.message_id
+          // Update with final message ID and content
+          setMessages(prev =>
+            prev.map(msg =>
+              msg.id === tempId
+                ? {
+                    ...msg,
+                    id: event.message_id,
+                    content: event.full_answer,
+                  }
+                : msg
+            )
+          )
+          setSeenMessageIds(prev => {
+            const next = new Set(prev)
+            next.add(event.message_id)
+            return next
+          })
+
+          // Poll for follow-ups in background
+          pollFollowUps(event.message_id)
+        },
+
+        onError: (errorMsg: string) => {
+          setError(errorMsg || 'Failed to get response. Please try again.')
+          // Remove placeholder message on error
+          setMessages(prev => prev.filter(msg => msg.id !== tempId))
+        },
       })
 
-      if (!response.ok) {
-        throw new Error('Failed to send message')
-      }
-
-      const data = await response.json()
-
-      // Add assistant message to UI
-      const assistantMessage: Message = {
-        id: data.message_id,
-        role: 'assistant',
-        content: data.answer,
-        citations: data.citations,
-        follow_ups: data.follow_ups || [],
-        created_at: new Date().toISOString(),
-      }
-      setMessages(prev => [...prev, assistantMessage])
-      setSeenMessageIds(prev => {
-        const next = new Set(prev)
-        next.add(assistantMessage.id)
-        return next
-      })
-      const shouldAnimateAssistant = animationEnabled && !seenMessageIds.has(assistantMessage.id)
-      setAnimateMessageId(shouldAnimateAssistant ? assistantMessage.id : undefined)
-      
       // Only save session after successful first exchange
       if (isFirstMessage) {
         notifySessionTitle(content)
@@ -204,8 +281,11 @@ export default function ChatInterface({
     } catch (err) {
       setError('Failed to get response. Please try again.')
       console.error('Error sending message:', err)
+      // Remove placeholder message on error
+      setMessages(prev => prev.filter(msg => msg.id === userMessage.id || msg.role !== 'assistant' || msg.content !== ''))
     } finally {
       setIsLoading(false)
+      setIsStreaming(false)
     }
   }
 
@@ -530,7 +610,8 @@ export default function ChatInterface({
           onFollowupClick={(text: string) => sendMessage(text)}
         />
         
-        {isLoading && (
+        {/* Show loading indicator only when loading but not streaming (streaming shows content directly) */}
+        {isLoading && !isStreaming && (
           <div className="flex items-start gap-3 mb-4">
             <div
               className={`w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0 ${

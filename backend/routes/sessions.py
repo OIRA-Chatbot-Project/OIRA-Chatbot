@@ -1,14 +1,16 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import Optional
 from sqlalchemy import func
-from pydantic import BaseModel
 from langchain_openai import ChatOpenAI
 
 from database import get_db, Session as DBSession, User as DBUser, Message as DBMessage
-from models import SessionInfo, SessionsResponse
-from auth import get_current_user, get_user_id_from_token
+from models import SessionInfo, SessionsResponse, GenerateTitleRequest, GenerateTitleResponse, UpdateSessionRequest
+from auth import get_current_user
 from config import OPENAI_API_KEY
+from utils import get_user_from_token
+from logger import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
@@ -20,18 +22,12 @@ async def get_user_sessions(
 ):
     """
     Retrieve all sessions for the authenticated user
-    
+
     - Returns list of sessions with metadata
     - Used to display session history/switcher
     """
     try:
-        # Get user ID from token
-        clerk_user_id = get_user_id_from_token(current_user)
-        
-        # Get user from database
-        user = db.query(DBUser).filter(DBUser.clerk_user_id == clerk_user_id).first()
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found")
+        user = get_user_from_token(db, current_user)
         
         # Get all sessions with message counts (optimized query)
         sessions = db.query(
@@ -81,10 +77,7 @@ async def delete_session(
     Delete a session and its messages for the authenticated user.
     """
     try:
-        clerk_user_id = get_user_id_from_token(current_user)
-        user = db.query(DBUser).filter(DBUser.clerk_user_id == clerk_user_id).first()
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found")
+        user = get_user_from_token(db, current_user)
 
         session = db.query(DBSession).filter(
             DBSession.session_id == session_id,
@@ -104,22 +97,6 @@ async def delete_session(
         raise HTTPException(status_code=500, detail=f"Error deleting session: {str(e)}")
 
 
-class GenerateTitleRequest(BaseModel):
-    """Request to generate a title for a session"""
-    session_id: str
-    first_message: str
-
-
-class GenerateTitleResponse(BaseModel):
-    """Response with generated title"""
-    title: str
-
-
-class UpdateSessionRequest(BaseModel):
-    """Update a session's title"""
-    title: Optional[str] = None
-
-
 @router.post("/generate-title", response_model=GenerateTitleResponse)
 async def generate_session_title(
     request: GenerateTitleRequest,
@@ -129,27 +106,21 @@ async def generate_session_title(
     """
     Generate an AI-powered title for a chat session based on the first message.
     Similar to ChatGPT's auto-title generation.
-    
+
     - Takes the first user message
     - Uses LLM to generate a concise, descriptive title (3-5 words)
     - Updates the session in the database
     - Returns the generated title
     """
     try:
-        # Get user ID from token
-        clerk_user_id = get_user_id_from_token(current_user)
-        
-        # Get user from database
-        user = db.query(DBUser).filter(DBUser.clerk_user_id == clerk_user_id).first()
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found")
-        
+        user = get_user_from_token(db, current_user)
+
         # Verify session belongs to user
         session = db.query(DBSession).filter(
             DBSession.session_id == request.session_id,
             DBSession.user_id == user.id
         ).first()
-        
+
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
         
@@ -190,7 +161,7 @@ Title:"""
     except HTTPException:
         raise
     except Exception as e:
-        print(f"[ERROR] Failed to generate title: {e}")
+        logger.error(f"Failed to generate title: {e}")
         raise HTTPException(status_code=500, detail=f"Error generating title: {str(e)}")
 
 
@@ -205,10 +176,7 @@ async def update_session(
     Update a session's title or pinned status.
     """
     try:
-        clerk_user_id = get_user_id_from_token(current_user)
-        user = db.query(DBUser).filter(DBUser.clerk_user_id == clerk_user_id).first()
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found")
+        user = get_user_from_token(db, current_user)
 
         session = db.query(DBSession).filter(
             DBSession.session_id == session_id,

@@ -104,7 +104,30 @@ class SessionsResponse(BaseModel):
     sessions: List[SessionInfo] = Field(default_factory=list, description="List of user sessions")
 
 
+class GenerateTitleRequest(BaseModel):
+    """Request to generate a title for a session"""
+    session_id: str = Field(..., description="Session identifier")
+    first_message: str = Field(..., description="First message in the session")
+
+
+class GenerateTitleResponse(BaseModel):
+    """Response with generated title"""
+    title: str = Field(..., description="Generated session title")
+
+
+class UpdateSessionRequest(BaseModel):
+    """Request to update a session's title"""
+    title: Optional[str] = Field(None, description="New session title")
+
+
 class HealthResponse(BaseModel):
     """Response model for health check"""
     status: str = Field(..., description="API status")
     version: str = Field(..., description="API version")
+
+
+class FollowUpsResponse(BaseModel):
+    """Response model for follow-up suggestions endpoint"""
+    message_id: int = Field(..., description="Message ID")
+    follow_ups: List[str] = Field(default_factory=list, description="Follow-up suggestions")
+    ready: bool = Field(default=False, description="Whether follow-ups are ready")

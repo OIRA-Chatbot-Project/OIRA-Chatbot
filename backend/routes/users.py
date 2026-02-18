@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from datetime import datetime
 
 from database import get_db, User as DBUser
 from models import UserCreate, UserResponse
 from auth import get_current_user, get_user_id_from_token
+from utils import get_utc_now
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -38,7 +38,7 @@ async def create_or_get_user(
             if user_data.email != existing_user.email or user_data.name != existing_user.name:
                 existing_user.email = user_data.email
                 existing_user.name = user_data.name
-                existing_user.updated_at = datetime.now(datetime.UTC) if hasattr(datetime, 'UTC') else datetime.utcnow()
+                existing_user.updated_at = get_utc_now()
                 db.commit()
                 db.refresh(existing_user)
             

@@ -217,3 +217,7 @@ backend/chroma.sqlite3
 
 backend/chatbot.db
 bash.exe.stackdump
+
+# Database backup files
+*.backup_*
+*.db.backup*

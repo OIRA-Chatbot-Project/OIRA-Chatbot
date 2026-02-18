@@ -2,6 +2,8 @@ export interface Citation {
   content: string
   source: string
   page: number | null
+  url?: string
+  doc_type?: string
 }
 
 export interface Message {

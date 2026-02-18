@@ -1,13 +1,16 @@
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_chroma import Chroma
 from langchain_core.messages import SystemMessage, HumanMessage
-from typing import List, Dict, Tuple, Optional
+from typing import List, Dict, Tuple, Optional, AsyncGenerator
 import os
 import re
 import json
+import asyncio
 import config
 from prompts import get_decompose_prompt, get_user_prompt, get_contextualize_prompt, get_question_classifier_prompt, SYSTEM_PROMPT
-import math
+from logger import get_logger
+
+logger = get_logger(__name__)
 
 class ChatbotService:
     """Service for handling chatbot RAG operations"""
@@ -95,14 +98,14 @@ class ChatbotService:
 
                 # Validate category
                 if category in ["course_catalog", "academic_policy", "off_topic"]:
-                    print(f"[CLASSIFICATION] Question classified as: {category}")
+                    logger.info(f"Question classified as: {category}")
                     return category
                 else:
-                    print(f"[WARNING] Invalid category '{category}', defaulting to 'course_catalog'")
+                    logger.warning(f"Invalid category '{category}', defaulting to 'course_catalog'")
                     return "course_catalog"
 
         except (json.JSONDecodeError, KeyError, AttributeError) as e:
-            print(f"[WARNING] Question classification failed: {e}. Defaulting to 'course_catalog'")
+            logger.warning(f"Question classification failed: {e}. Defaulting to 'course_catalog'")
 
         # Fallback to catalog (safer than rejecting)
         return "course_catalog"
@@ -171,22 +174,19 @@ class ChatbotService:
                     return [question]
                 
                 if data.get("type") == "too_broad":
-                    # Return original question but log warning
                     suggestion = data.get("suggestion", "Please narrow your question.")
-                    print(f"[WARNING] Query too broad. Suggestion: {suggestion}")
-                    return [question]  # Fallback to single retrieval
-                
+                    logger.warning(f"Query too broad. Suggestion: {suggestion}")
+                    return [question]
+
                 sub_questions = data.get("sub_questions", [])
                 if isinstance(sub_questions, list) and sub_questions:
-                    # Enforce maximum limit
                     if len(sub_questions) > 5:
-                        print(f"[WARNING] Too many sub-questions ({len(sub_questions)}). Limiting to first 5.")
+                        logger.warning(f"Too many sub-questions ({len(sub_questions)}). Limiting to first 5.")
                         sub_questions = sub_questions[:5]
                     return sub_questions
-            
+
         except (json.JSONDecodeError, KeyError, AttributeError) as e:
-            # Fallback: if JSON parsing fails, use original question
-            print(f"[WARNING] Query decomposition failed: {e}. Using original question.")
+            logger.warning(f"Query decomposition failed: {e}. Using original question.")
         
         # Fallback to original question
         return [question]
@@ -217,9 +217,8 @@ class ChatbotService:
         
         # Adjust strategy based on number of sub-questions
         if total_min > config.MAX_MULTI_STEP_DOCS:
-            # Too many sub-questions - reduce minimum guarantee
             min_per_query = max(2, config.MAX_MULTI_STEP_DOCS // num_subqueries)
-            print(f"[INFO] Many sub-questions ({num_subqueries}). Adjusting to {min_per_query} docs minimum per query.")
+            logger.info(f"Many sub-questions ({num_subqueries}). Adjusting to {min_per_query} docs minimum per query.")
         
         # Retrieve documents for each sub-question
         docs_per_question = []
@@ -236,7 +235,7 @@ class ChatbotService:
                     docs = self.retriever.invoke(sub_q)
                 docs_per_question.append(docs)
             except Exception as e:
-                print(f"[WARNING] Retrieval failed for sub-query '{sub_q}': {e}")
+                logger.warning(f"Retrieval failed for sub-query '{sub_q}': {e}")
                 docs_per_question.append([])
         
         # Phase 1: Guarantee minimum documents per sub-question
@@ -271,11 +270,10 @@ class ChatbotService:
                         docs_count_per_query[idx] += 1
                         
                         if len(all_docs) >= config.MAX_MULTI_STEP_DOCS:
-                            # Log distribution for debugging
-                            print(f"[INFO] Document distribution: {dict(zip(range(1, num_subqueries+1), docs_count_per_query))}")
+                            logger.debug(f"Document distribution: {dict(zip(range(1, num_subqueries+1), docs_count_per_query))}")
                             return all_docs
-        
-        print(f"[INFO] Final document distribution: {dict(zip(range(1, num_subqueries+1), docs_count_per_query))}")
+
+        logger.debug(f"Final document distribution: {dict(zip(range(1, num_subqueries+1), docs_count_per_query))}")
         return all_docs
 
     def _merge_docs(self, base_docs: List, extra_docs: List) -> List:
@@ -296,41 +294,134 @@ class ChatbotService:
     def _build_contextual_query(self, question: str, conversation_history: List[Dict[str, str]]) -> str:
         """
         Build a contextual query that incorporates conversation history for better follow-up handling.
-        
+
         Args:
             question: Current user question
             conversation_history: Previous conversation turns
-            
+
         Returns:
             Standalone query that includes necessary context
         """
         if not conversation_history:
             return question
-        
+
         # Only use last 2-3 exchanges (4-6 messages) for context
         recent_history = conversation_history[-6:]
         if not recent_history:
             return question
-        
+
         # Format history concisely
         history_text = "\n".join([
             f"{msg['role'].capitalize()}: {msg['content'][:150]}"  # Truncate long messages
             for msg in recent_history
         ])
-        
+
         contextualize_prompt = get_contextualize_prompt(question, history_text)
-        
+
         try:
             response = self.decompose_llm.invoke(contextualize_prompt)
             contextual_query = response.content.strip()
-            
+
             # Validate that we got a reasonable response
             if contextual_query and len(contextual_query) > 10:
                 return contextual_query
         except Exception as e:
-            print(f"[WARNING] Contextualization failed: {e}. Using original question.")
-        
+            logger.warning(f"Contextualization failed: {e}. Using original question.")
+
         return question
+
+    async def _classify_question_async(self, question: str) -> str:
+        """
+        Async version of question classification.
+        Classify a question as 'course_catalog', 'academic_policy', or 'off_topic'.
+        """
+        if not config.ENABLE_OFF_TOPIC_DETECTION:
+            return "course_catalog"
+
+        classifier_prompt = get_question_classifier_prompt(question)
+
+        try:
+            response = await self.classifier_llm.ainvoke(classifier_prompt)
+            response_text = response.content.strip()
+
+            json_start = response_text.find('{')
+            json_end = response_text.rfind('}') + 1
+            if json_start >= 0 and json_end > json_start:
+                json_str = response_text[json_start:json_end]
+                data = json.loads(json_str)
+
+                category = data.get("category", "course_catalog")
+                if category in ["course_catalog", "academic_policy", "off_topic"]:
+                    logger.info(f"Question classified as: {category}")
+                    return category
+                else:
+                    logger.warning(f"Invalid category '{category}', defaulting to 'course_catalog'")
+                    return "course_catalog"
+
+        except (json.JSONDecodeError, KeyError, AttributeError) as e:
+            logger.warning(f"Question classification failed: {e}. Defaulting to 'course_catalog'")
+
+        return "course_catalog"
+
+    async def _build_contextual_query_async(self, question: str, conversation_history: List[Dict[str, str]]) -> str:
+        """
+        Async version of contextual query building.
+        """
+        if not conversation_history:
+            return question
+
+        recent_history = conversation_history[-6:]
+        if not recent_history:
+            return question
+
+        history_text = "\n".join([
+            f"{msg['role'].capitalize()}: {msg['content'][:150]}"
+            for msg in recent_history
+        ])
+
+        contextualize_prompt = get_contextualize_prompt(question, history_text)
+
+        try:
+            response = await self.decompose_llm.ainvoke(contextualize_prompt)
+            contextual_query = response.content.strip()
+
+            if contextual_query and len(contextual_query) > 10:
+                return contextual_query
+        except Exception as e:
+            logger.warning(f"Contextualization failed: {e}. Using original question.")
+
+        return question
+
+    def _is_simple_question(self, question: str) -> bool:
+        """
+        Determine if a question is simple enough to skip query decomposition.
+        Simple questions are short, direct questions without comparisons or lists.
+
+        Args:
+            question: The user's question
+
+        Returns:
+            True if the question is simple and should skip decomposition
+        """
+        words = question.split()
+
+        # Short questions (< 15 words) are likely simple
+        if len(words) < 15:
+            # Check for comparison/complex keywords that indicate decomposition is needed
+            comparison_keywords = [
+                'compare', 'difference', 'between', 'versus', 'vs',
+                'both', 'all', 'each', 'every', 'multiple',
+                'list', 'what are the', 'how many', 'which ones'
+            ]
+            question_lower = question.lower()
+            if not any(kw in question_lower for kw in comparison_keywords):
+                # Also check for multiple course codes or majors (indicates comparison)
+                course_pattern = r'[A-Z]{2,4}\s*\d{3}'
+                matches = re.findall(course_pattern, question.upper())
+                if len(matches) <= 1:
+                    return True
+
+        return False
 
     def _is_sequence_question(self, question: str) -> bool:
         """Heuristic check for questions asking about a major/course sequence or plan."""
@@ -414,7 +505,7 @@ class ChatbotService:
                         suggestions = suggestions[:5]
                     return suggestions
         except Exception as e:
-            print(f"[WARNING] Follow-up generation failed: {e}")
+            logger.warning(f"Follow-up generation failed: {e}")
 
         # Fallback: simple heuristic suggestions
         fallback = [
@@ -442,7 +533,7 @@ class ChatbotService:
 
         # STEP 2: Reject off-topic questions immediately
         if question_category == "off_topic":
-            print(f"[OFF-TOPIC] Question rejected: {question}")
+            logger.info(f"Off-topic question rejected: {question[:100]}")
             return (
                 config.OFF_TOPIC_MESSAGE,
                 [],
@@ -457,7 +548,7 @@ class ChatbotService:
         elif question_category == "academic_policy":
             doc_type_filter = "policy"
 
-        print(f"[INFO] Filtering retrieval to doc_type: {doc_type_filter}")
+        logger.debug(f"Filtering retrieval to doc_type: {doc_type_filter}")
 
         try:
             # Use config default if not specified
@@ -466,26 +557,15 @@ class ChatbotService:
 
             # Build contextual query for better follow-up handling
             search_query = self._build_contextual_query(question, conversation_history)
-            print(f"[INFO] Retrieval start | category={question_category} | multi_step={use_multi_step}")
-            print(f"[INFO] Search query: {search_query}")
+            logger.info(f"Retrieval start | category={question_category} | multi_step={use_multi_step}")
 
             # STEP 4: Decompose query if needed and enabled
             if use_multi_step:
                 sub_questions = self._decompose_query(search_query)
-                print(f"[INFO] Sub-questions: {len(sub_questions)}")
+                logger.debug(f"Sub-questions: {len(sub_questions)}")
 
-                # Log decomposition for debugging
-                if len(sub_questions) > 1:
-                    print(f"\n[DECOMPOSITION] Query Decomposition:")
-                    print(f"Original: {question}")
-                    print(f"Contextualized: {search_query}")
-                    print(f"Number of sub-questions: {len(sub_questions)}")
-                    for i, sq in enumerate(sub_questions, 1):
-                        print(f"  {i}. {sq}")
-
-                    # Warn if approaching limits
-                    if len(sub_questions) >= 4:
-                        print(f"[WARNING] High number of sub-questions ({len(sub_questions)}). Results may be limited per topic.")
+                if len(sub_questions) >= 4:
+                    logger.warning(f"High number of sub-questions ({len(sub_questions)}). Results may be limited per topic.")
 
                 # Expand sequence questions for broader recall
                 if question_category == "course_catalog" and self._is_sequence_question(question):
@@ -507,7 +587,7 @@ class ChatbotService:
                     )
                 else:
                     docs = self.retriever.invoke(search_query)
-            print(f"[INFO] Retrieved docs: {len(docs)}")
+            logger.info(f"Retrieved {len(docs)} documents")
 
             # Sequence questions: boost likely sections (core curriculum / sequence guidance)
             if question_category == "course_catalog" and self._is_sequence_question(question):
@@ -527,8 +607,7 @@ class ChatbotService:
                     )
                 if boosted_docs:
                     docs = self._merge_docs(docs, boosted_docs)
-                    print(f"[INFO] Boosted docs added: {len(boosted_docs)}")
-                    print(f"[INFO] Retrieved docs (after boost): {len(docs)}")
+                    logger.debug(f"Boosted docs added: {len(boosted_docs)}, total: {len(docs)}")
 
             # Handle no results
             if not docs:
@@ -543,7 +622,7 @@ class ChatbotService:
                     []
                 )
         except Exception as e:
-            print(f"[ERROR] Retrieval error: {e}")
+            logger.error(f"Retrieval error: {e}")
             return (
                 "Sorry, I ran into an error retrieving information. "
                 "Please try again later or contact support.",
@@ -554,7 +633,6 @@ class ChatbotService:
 
         # Build knowledge base with page citations
         knowledge = self._prepare_knowledge(docs)
-        print(f"[INFO] Knowledge length: {len(knowledge)}")
 
         # Build citations list for API response
         citations = []
@@ -621,7 +699,7 @@ class ChatbotService:
             return answer, citations, question_category, followups  # type: ignore
 
         except Exception as e:
-            print(f"[ERROR] LLM generation error: {e}")
+            logger.error(f"LLM generation error: {e}")
             return (
                 "Sorry, I encountered an error generating a response. "
                 "Please try again or contact your academic advisor.",
@@ -630,10 +708,209 @@ class ChatbotService:
                 []
             )
 
-    def recommend_courses_from_schedule(self, schedule_summary: str, conversation_history: List[Dict[str, str]]) -> Tuple[str, List[Dict], str]:
+    def get_answer_without_followups(self, question: str, conversation_history: List[Dict[str, str]], use_multi_step: Optional[bool] = None) -> Tuple[str, List[Dict], str]:
+        """
+        Get an answer without generating follow-up suggestions (for faster response).
+        Follow-ups can be generated separately in a background task.
+
+        Args:
+            question: The user's question
+            conversation_history: List of previous messages with 'role' and 'content'
+            use_multi_step: Whether to use multi-step query decomposition
+
+        Returns:
+            Tuple of (answer, citations, question_category)
+        """
+        answer, citations, category, _ = self.get_answer(question, conversation_history, use_multi_step)
+        return answer, citations, category
+
+    async def stream_answer(
+        self,
+        question: str,
+        conversation_history: List[Dict[str, str]],
+        use_multi_step: Optional[bool] = None
+    ) -> AsyncGenerator[Dict, None]:
+        """
+        Stream the answer token by token for faster perceived response time.
+
+        Yields dictionaries with:
+        - {"type": "metadata", "citations": [...], "category": "..."}
+        - {"type": "token", "content": "..."}
+        - {"type": "done", "full_answer": "..."}
+
+        Args:
+            question: The user's question
+            conversation_history: List of previous messages
+            use_multi_step: Whether to use multi-step query decomposition
+        """
+        # STEP 1: Run classification and contextualization in PARALLEL
+        category, search_query = await asyncio.gather(
+            self._classify_question_async(question),
+            self._build_contextual_query_async(question, conversation_history)
+        )
+
+        # STEP 2: Handle off-topic questions
+        if category == "off_topic":
+            logger.info(f"Off-topic question rejected: {question[:100]}")
+            yield {"type": "metadata", "citations": [], "category": "off_topic"}
+            yield {"type": "token", "content": config.OFF_TOPIC_MESSAGE}
+            yield {"type": "done", "full_answer": config.OFF_TOPIC_MESSAGE}
+            return
+
+        # STEP 3: Determine document type filter
+        doc_type_filter = None
+        if category == "course_catalog":
+            doc_type_filter = "catalog"
+        elif category == "academic_policy":
+            doc_type_filter = "policy"
+
+        logger.info(f"Streaming | category={category} | doc_type={doc_type_filter}")
+
+        # Use config default if not specified
+        if use_multi_step is None:
+            use_multi_step = config.USE_MULTI_STEP_QUERY
+
+        try:
+            # STEP 4: Smart skip - check if we should decompose
+            should_decompose = use_multi_step and not self._is_simple_question(question)
+
+            if should_decompose:
+                sub_questions = self._decompose_query(search_query)
+                logger.debug(f"Sub-questions: {len(sub_questions)}")
+
+                # Expand sequence questions
+                if category == "course_catalog" and self._is_sequence_question(question):
+                    expanded = self._expand_sequence_queries(search_query, question)
+                    sub_questions = sub_questions + expanded
+                    if len(sub_questions) > 8:
+                        sub_questions = sub_questions[:8]
+
+                docs = self._retrieve_for_subqueries(sub_questions, doc_type_filter)
+            else:
+                # Simple question - direct retrieval
+                logger.debug("Simple question - skipping decomposition")
+                if doc_type_filter:
+                    docs = self.vector_store.similarity_search(
+                        search_query,
+                        k=config.RETRIEVER_K,
+                        filter={"doc_type": doc_type_filter}
+                    )
+                else:
+                    docs = self.retriever.invoke(search_query)
+
+            logger.info(f"Retrieved {len(docs)} documents")
+
+            # Sequence question boosting
+            if category == "course_catalog" and self._is_sequence_question(question):
+                section_filters = [{"section": "freeman_core"}, {"section": "sequence"}]
+                boosted_docs = []
+                for f in section_filters:
+                    filt = {"$and": [{"doc_type": "catalog"}, f]}
+                    boosted_docs.extend(
+                        self.vector_store.similarity_search(
+                            search_query,
+                            k=max(6, config.RETRIEVER_K // 2),
+                            filter=filt
+                        )
+                    )
+                if boosted_docs:
+                    docs = self._merge_docs(docs, boosted_docs)
+
+            # Handle no results
+            if not docs:
+                fallback_message = (
+                    "I'm not seeing that information in the documents I have, but I'm happy to help with anything else! "
+                    "For official guidance, please consult your academic advisor or the Office of the Registrar."
+                )
+                yield {"type": "metadata", "citations": [], "category": category}
+                yield {"type": "token", "content": fallback_message}
+                yield {"type": "done", "full_answer": fallback_message}
+                return
+
+        except Exception as e:
+            logger.error(f"Retrieval error: {e}")
+            error_message = "Sorry, I ran into an error retrieving information. Please try again later."
+            yield {"type": "metadata", "citations": [], "category": category}
+            yield {"type": "token", "content": error_message}
+            yield {"type": "done", "full_answer": error_message}
+            return
+
+        # Build knowledge and citations
+        knowledge = self._prepare_knowledge(docs)
+
+        citations = []
+        for doc in docs:
+            meta = doc.metadata or {}
+            src = self._short_source(meta.get("source", "Catalogue"))
+            page = (meta.get("page", 0) or 0) + 1
+            source_filename = os.path.basename(meta.get("source", "catalog.pdf"))
+            doc_type = meta.get("doc_type", "catalog")
+
+            citation = {
+                "content": doc.page_content[:200] + "..." if len(doc.page_content) > 200 else doc.page_content,
+                "source": src,
+                "page": page,
+                "url": self._get_document_url(source_filename, page),
+                "doc_type": doc_type
+            }
+            citations.append(citation)
+
+        # STEP 5: Yield metadata first (citations available immediately)
+        yield {"type": "metadata", "citations": citations, "category": category}
+
+        # Format conversation history
+        history_context = ""
+        if conversation_history:
+            history_context = "\n".join([
+                f"{msg['role'].capitalize()}: {msg['content'][:300]}"
+                for msg in conversation_history[-6:]
+            ])
+
+        # Build prompt
+        user_prompt = get_user_prompt(question, knowledge, history_context if conversation_history else "")
+
+        messages = [
+            SystemMessage(content=SYSTEM_PROMPT),
+            HumanMessage(content=user_prompt)
+        ]
+
+        # STEP 6: Stream the LLM response
+        full_answer = ""
+        try:
+            async for chunk in self.llm.astream(messages):
+                token = chunk.content or ""
+                if token:
+                    full_answer += token
+                    yield {"type": "token", "content": token}
+
+            # Clean up the answer
+            fallback_sentence = (
+                "I'm not seeing that information in the documents I have, but I'm happy to help with anything else!"
+                "For official guidance and questions about how these policies apply to your specific situation, please consult with your academic advisor or the Office of the Registrar."
+            )
+
+            if fallback_sentence in full_answer and citations:
+                if full_answer.strip() != fallback_sentence:
+                    full_answer = full_answer.replace(fallback_sentence, '').strip()
+
+            # Add policy disclaimer if applicable
+            if category == "academic_policy" and full_answer and fallback_sentence not in full_answer:
+                disclaimer = config.POLICY_DISCLAIMER
+                yield {"type": "token", "content": disclaimer}
+                full_answer += disclaimer
+
+            yield {"type": "done", "full_answer": full_answer}
+
+        except Exception as e:
+            logger.error(f"LLM streaming error: {e}")
+            error_message = "Sorry, I encountered an error generating a response."
+            yield {"type": "token", "content": error_message}
+            yield {"type": "done", "full_answer": error_message}
+
+    def recommend_courses_from_schedule(self, schedule_summary: str, conversation_history: List[Dict[str, str]]) -> Tuple[str, List[Dict], str, List[str]]:
         """
         Provide course recommendations using a student's prior schedule summary.
-        Returns tuple of (answer, citations, question_category).
+        Returns tuple of (answer, citations, question_category, followups).
         """
         question = (
             "A student shared their previously completed courses and experiences:\n"
@@ -654,6 +931,3 @@ def get_chatbot_service() -> ChatbotService:
     if _chatbot_service_instance is None:
         _chatbot_service_instance = ChatbotService()
     return _chatbot_service_instance
-
-# For backward compatibility
-chatbot_service = None  # Will be initialized on first use

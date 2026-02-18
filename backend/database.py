@@ -63,14 +63,15 @@ class Session(Base):
 class Message(Base):
     """Stores user and assistant messages"""
     __tablename__ = "messages"
-    
+
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     session_id = Column(String, ForeignKey("sessions.session_id"), index=True, nullable=False)
     role = Column(String, nullable=False)  # 'user' or 'assistant'
     content = Column(Text, nullable=False)
     citations = Column(Text, nullable=True)  # JSON string of citations
+    follow_ups = Column(Text, nullable=True)  # JSON string of follow-up suggestions
     created_at = Column(DateTime, default=datetime.utcnow)
-    
+
     # Relationships
     session = relationship("Session", back_populates="messages")
 

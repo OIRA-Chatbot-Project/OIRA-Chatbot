@@ -1,14 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.orm import Session
-import re
 import json
-from datetime import datetime
 
 from database import get_db, Session as DBSession, User as DBUser, Message as DBMessage
 from models import ScheduleUploadResponse, Citation, ParsedCourse
-from auth import get_current_user, get_user_id_from_token
+from auth import get_current_user
 from chatbot_service import get_chatbot_service
 from schedule_parser import extract_text_from_upload, parse_schedule_entries, summarize_schedule
+from utils import get_user_from_token, get_session_for_user, clean_answer, get_utc_now, get_conversation_history
 
 router = APIRouter(prefix="/schedule", tags=["schedule"])
 
@@ -25,14 +24,8 @@ async def upload_schedule(
     and provide tailored recommendations.
     """
     try:
-        # Get user ID from token
-        clerk_user_id = get_user_id_from_token(current_user)
-        
-        # Get user from database
-        user = db.query(DBUser).filter(DBUser.clerk_user_id == clerk_user_id).first()
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found. Please sign up first.")
-        
+        user = get_user_from_token(db, current_user)
+
         session = db.query(DBSession).filter(DBSession.session_id == session_id).first()
         if not session:
             session = DBSession(session_id=session_id, user_id=user.id)
@@ -42,7 +35,7 @@ async def upload_schedule(
             # Verify session belongs to user
             if session.user_id != user.id:
                 raise HTTPException(status_code=403, detail="Session does not belong to user")
-            session.updated_at = datetime.now(datetime.UTC) if hasattr(datetime, 'UTC') else datetime.utcnow()
+            session.updated_at = get_utc_now()
             db.commit()
 
         contents = await file.read()
@@ -73,27 +66,12 @@ async def upload_schedule(
         db.refresh(user_message)
 
         # Build conversation history for context
-        history_messages = db.query(DBMessage).filter(
-            DBMessage.session_id == session_id,
-            DBMessage.id < user_message.id
-        ).order_by(DBMessage.created_at.desc()).limit(6).all()
-
-        conversation_history = [
-            {"role": msg.role, "content": msg.content}
-            for msg in reversed(history_messages)
-        ]
+        conversation_history = get_conversation_history(db, session_id, user_message.id)
 
         chatbot = get_chatbot_service()
         answer, citations, question_category, followups = chatbot.recommend_courses_from_schedule(summary, conversation_history)
 
-        # Strip inline bracket citations from schedule-upload responses as well
-        try:
-            cleaned_answer = re.sub(r"\[[^\]]+?,\s*p\.\s*\d+\]", "", answer)
-            cleaned_answer = re.sub(r"\n{3,}", "\n\n", cleaned_answer)
-            cleaned_answer = re.sub(r"[ \t]{2,}", " ", cleaned_answer)
-            cleaned_answer = cleaned_answer.strip()
-        except Exception:
-            cleaned_answer = answer
+        cleaned_answer = clean_answer(answer)
 
         assistant_message = DBMessage(
             session_id=session_id,

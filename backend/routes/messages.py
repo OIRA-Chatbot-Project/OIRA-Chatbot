@@ -4,7 +4,11 @@ import json
 
 from database import get_db, Session as DBSession, User as DBUser, Message as DBMessage
 from models import MessagesResponse, MessageResponse, Citation
-from auth import get_current_user, get_user_id_from_token
+from auth import get_current_user
+from utils import get_user_from_token
+from logger import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter(prefix="/messages", tags=["messages"])
 
@@ -17,26 +21,20 @@ async def get_messages(
 ):
     """
     Retrieve all messages for a given session
-    
+
     - Returns full conversation history
     - Includes citations for assistant messages
     - Used to restore chat history when user returns
     """
     try:
-        # Get user ID from token
-        clerk_user_id = get_user_id_from_token(current_user)
-        
-        # Get user from database
-        user = db.query(DBUser).filter(DBUser.clerk_user_id == clerk_user_id).first()
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found")
-        
+        user = get_user_from_token(db, current_user)
+
         # Verify session exists and belongs to user
         session = db.query(DBSession).filter(
             DBSession.session_id == session_id,
             DBSession.user_id == user.id
         ).first()
-        
+
         if not session:
             # Return empty history for non-existent or unauthorized sessions
             return MessagesResponse(
@@ -57,8 +55,8 @@ async def get_messages(
                 try:
                     citation_data = json.loads(msg.citations)
                     citations = [Citation(**c) for c in citation_data]
-                except:
-                    pass  # If citation parsing fails, leave as None
+                except json.JSONDecodeError:
+                    logger.warning(f"Failed to parse citations for message {msg.id}")
             
             message_responses.append(MessageResponse(
                 id=msg.id,

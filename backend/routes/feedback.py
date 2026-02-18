@@ -3,7 +3,8 @@ from sqlalchemy.orm import Session
 
 from database import get_db, Session as DBSession, User as DBUser, Message as DBMessage, Feedback as DBFeedback
 from models import FeedbackRequest, FeedbackResponse
-from auth import get_current_user, get_user_id_from_token
+from auth import get_current_user
+from utils import get_user_from_token, get_session_for_user
 
 router = APIRouter(prefix="/feedback", tags=["feedback"])
 
@@ -16,28 +17,16 @@ async def submit_feedback(
 ):
     """
     Submit feedback for an assistant message
-    
+
     - Accepts thumbs up (1) or thumbs down (-1) rating
     - Optional note for additional feedback
     - Stores feedback in database for analytics
     """
     try:
-        # Get user ID from token
-        clerk_user_id = get_user_id_from_token(current_user)
-        
-        # Get user from database
-        user = db.query(DBUser).filter(DBUser.clerk_user_id == clerk_user_id).first()
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found")
-        
+        user = get_user_from_token(db, current_user)
+
         # Verify session belongs to user
-        session = db.query(DBSession).filter(
-            DBSession.session_id == request.session_id,
-            DBSession.user_id == user.id
-        ).first()
-        
-        if not session:
-            raise HTTPException(status_code=403, detail="Session does not belong to user")
+        get_session_for_user(db, request.session_id, user)
         
         # Validate that the message exists and belongs to the session
         message = db.query(DBMessage).filter(
