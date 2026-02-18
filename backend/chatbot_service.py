@@ -597,13 +597,8 @@ class ChatbotService:
             # Handle no results
             if not docs:
                 fallback_message = (
-<<<<<<< HEAD
-                    "I’m not seeing that information in the documents I have, but I’m happy to help with anything else! "
+                    "I'm not seeing that information in the documents I have, but I'm happy to help with anything else! "
                     "For official guidance and questions about how these policies apply to your specific situation, please consult with your academic advisor or the Office of the Registrar."
-=======
-                    "I couldn't retrieve relevant information from the documents. "
-                    "Please try rephrasing your question or contact your academic advisor for assistance."
->>>>>>> 9055fab6d8e513dcf71c06c576cf8828fa8ccf31
                 )
                 if question_category == "academic_policy":
                     fallback_message = (
