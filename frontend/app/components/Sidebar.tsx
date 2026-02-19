@@ -575,7 +575,7 @@ export default function Sidebar({
                     <ul className="mt-2 space-y-2">
                       <li>
                         <a
-                          href="/course-catalog.pdf"
+                          href="https://drive.google.com/file/d/1gaUCs_WZl0jLeS41y6cCVwHXiLeeejDA/view?usp=sharing"
                           target="_blank"
                           rel="noreferrer"
                           className="underline underline-offset-2 hover:text-primary"

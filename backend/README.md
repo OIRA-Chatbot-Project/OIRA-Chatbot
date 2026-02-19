@@ -39,11 +39,15 @@ DATABASE_URL=sqlite:///./chatbot.db
 CHROMA_PATH=chroma_db
 DATA_PATH=data
 ALLOWED_ORIGINS=http://localhost:3000,http://localhost:3001
+GOOGLE_DOCS_CSV=data/google_docs.csv
+GOOGLE_DOCS_CACHE_DIR=data/google_docs_cache
+GOOGLE_DOCS_REFRESH=false
+GOOGLE_DOCS_ONLY=false
 ```
 
 ### 3. Ingest Course Catalog Data
 
-Place your course catalog PDFs in the `data/` folder, then run:
+Place your course catalog PDFs in the `data/` folder, or list Google Docs viewer links in `data/google_docs.csv`, then run:
 
 ```bash
 python ingest_database.py
@@ -51,9 +55,23 @@ python ingest_database.py
 
 This will:
 - Load PDFs from the data directory
+- Fetch Google Docs, convert to Markdown, and cache the `.md` files
 - Split documents into chunks
 - Generate embeddings using OpenAI
 - Store embeddings in ChromaDB
+
+If you want to ingest Google Docs only (no PDFs), set:
+```
+GOOGLE_DOCS_ONLY=true
+```
+
+`data/google_docs.csv` format:
+```
+filename,doc_type,url
+2025-2026 course catalog,catalog,https://docs.google.com/document/d/<id>/edit?usp=sharing
+ACADEMIC STANDING,policy,https://docs.google.com/document/d/<id>/edit?usp=sharing
+```
+Docs must be shared with at least Viewer access.
 
 ### 4. Run the API Server
 

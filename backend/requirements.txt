@@ -33,9 +33,12 @@ openai==1.74.0
 # PDF Processing
 pypdf==5.4.0
 
+# Google Docs Processing
+requests==2.32.3
+markdownify==0.12.1
+
 # Image Processing (for schedule uploads)
 pillow==11.2.1
 pytesseract==0.3.13
 
 # Testing
-requests==2.32.3

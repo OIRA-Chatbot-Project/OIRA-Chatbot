@@ -75,9 +75,11 @@ async def chat(
         # Get answer from chatbot service (now returns 4 values including follow-ups)
         chatbot = get_chatbot_service()
         answer, citations, question_category, followups = chatbot.get_answer(request.message, conversation_history)
-        
+
         # Remove inline bracket citations like "[filename, p. 123]" from the answer
         try:
+            # Normalize spacing artifacts (e.g., "59 ." -> "59.")
+            cleaned_answer = re.sub(r"\s+([,.;:!?])", r"\1", answer)
             cleaned_answer = re.sub(r"\[[^\]]+?,\s*p\.\s*\d+\]", "", answer)
             # Collapse excessive blank lines but preserve markdown line breaks
             cleaned_answer = re.sub(r"\n{3,}", "\n\n", cleaned_answer)
@@ -102,7 +104,7 @@ async def chat(
 
         return ChatResponse(
             message_id=assistant_message.id,
-            answer=answer,
+            answer=cleaned_answer,
             citations=citation_objects,
             session_id=request.session_id,
             question_category=question_category,

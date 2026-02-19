@@ -9,6 +9,12 @@ DATA_PATH = os.getenv("DATA_PATH", "data")
 CHROMA_PATH = os.getenv("CHROMA_PATH", "chroma_db")
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./chatbot.db")
 
+# Google Docs ingestion
+GOOGLE_DOCS_CSV = os.getenv("GOOGLE_DOCS_CSV", "data/google_docs.csv")
+GOOGLE_DOCS_CACHE_DIR = os.getenv("GOOGLE_DOCS_CACHE_DIR", "data/google_docs_cache")
+GOOGLE_DOCS_REFRESH = os.getenv("GOOGLE_DOCS_REFRESH", "false").lower() == "true"
+GOOGLE_DOCS_ONLY = os.getenv("GOOGLE_DOCS_ONLY", "false").lower() == "true"
+
 # OpenAI Configuration
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")

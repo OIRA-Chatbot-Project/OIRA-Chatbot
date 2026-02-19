@@ -5,6 +5,7 @@ from typing import List, Dict, Tuple, Optional
 import os
 import re
 import json
+import re
 import config
 from prompts import get_decompose_prompt, get_user_prompt, get_contextualize_prompt, get_question_classifier_prompt, SYSTEM_PROMPT
 import math
@@ -107,7 +108,7 @@ class ChatbotService:
         # Fallback to catalog (safer than rejecting)
         return "course_catalog"
 
-    def _get_document_url(self, source_filename: str, page: int) -> str:
+    def _get_document_url(self, source_filename: str, page: int, source_url: Optional[str] = None) -> str:
         """
         This is for the Reference block under each answer.
         Generate appropriate URL for a document citation based on its source.
@@ -115,10 +116,14 @@ class ChatbotService:
         Args:
             source_filename: Base filename (e.g., "GRADE REPLACEMENT POLICY.pdf")
             page: Page number (1-indexed)
+            source_url: Optional external URL (e.g., Google Docs viewer link)
 
         Returns:
             URL string for frontend to link to
         """
+        if source_url:
+            return source_url
+
         # Clean filename for URL (remove spaces, special chars)
         url_safe_filename = source_filename.replace(" ", "%20")
 
@@ -139,8 +144,18 @@ class ChatbotService:
             page = (meta.get("page", 0) or 0) + 1
             header = f"[{src}, p. {page}]"
             # Add header before and after for better citation tracking
-            parts.append(f"{header}\n{d.page_content.strip()}\n{header}\n")
+            content = self._normalize_text(d.page_content).strip()
+            parts.append(f"{header}\n{content}\n{header}\n")
         return "\n".join(parts)
+
+    def _normalize_text(self, text: str) -> str:
+        """
+        Normalize spacing artifacts from PDF extraction and model output.
+        Removes spaces before common punctuation.
+        """
+        if not text:
+            return text
+        return re.sub(r"\s+([,.;:!?])", r"\1", text)
     
     def _decompose_query(self, question: str) -> List[str]:
         """
@@ -570,7 +585,7 @@ class ChatbotService:
                 "content": doc.page_content[:200] + "..." if len(doc.page_content) > 200 else doc.page_content,
                 "source": src,
                 "page": page,
-                "url": self._get_document_url(source_filename, page),
+                "url": self._get_document_url(source_filename, page, meta.get("source_url")),
                 "doc_type": doc_type  # Include for frontend filtering/display
             }
             citations.append(citation)
@@ -594,7 +609,7 @@ class ChatbotService:
             ]
 
             response = self.llm.invoke(messages)
-            answer = (response.content or "").strip()
+            answer = self._normalize_text((response.content or "").strip())
 
             # If the model appended the generic fallback sentence but we have citations,
             # remove the fallback to avoid redundant/contradictory text. The fallback

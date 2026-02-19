@@ -14,6 +14,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
 from langchain_openai.embeddings import OpenAIEmbeddings
 from langchain_chroma import Chroma
+from google_docs_loader import load_google_docs
 import config
 import os
 import re
@@ -152,17 +153,33 @@ def extract_course_documents(catalog_docs: list) -> list:
 # PyPDFDirectoryLoader automatically adds metadata:
 #   doc.metadata["source"] == filepath
 #   doc.metadata["page"]   == 0-based page number
-loader = PyPDFDirectoryLoader(DATA_PATH)
-raw_documents = loader.load()
+# Load PDFs - new way 
+# loader = PyPDFDirectoryLoader(DATA_PATH)
+# raw_documents = loader.load()
 
-print(f"Loaded {len(raw_documents)} raw pages from {DATA_PATH}")
+# print(f"Loaded {len(raw_documents)} raw pages from {DATA_PATH}")
+pdf_documents = []
+if not config.GOOGLE_DOCS_ONLY:
+    loader = PyPDFDirectoryLoader(DATA_PATH)
+    pdf_documents = loader.load()
+    print(f"Loaded {len(pdf_documents)} raw pages from {DATA_PATH}")
+
+# Load Google Docs (if configured)
+google_docs = load_google_docs()
+if google_docs:
+    print(f"Loaded {len(google_docs)} Google Docs from {config.GOOGLE_DOCS_CSV}")
+
+raw_documents = pdf_documents + google_docs
+
+print(f"Total raw documents: {len(raw_documents)}")
 
 # Add doc_type metadata to each document
 doc_type_counts = {"catalog": 0, "policy": 0}
 for doc in raw_documents:
     source_path = doc.metadata.get("source", "")
     filename = os.path.basename(source_path)
-    doc_type = classify_document_type(filename)
+    existing_type = doc.metadata.get("doc_type")
+    doc_type = existing_type or classify_document_type(filename)
     doc.metadata["doc_type"] = doc_type
     doc_type_counts[doc_type] += 1
 
