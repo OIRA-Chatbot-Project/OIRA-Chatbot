@@ -95,15 +95,24 @@ HALLUCINATION PREVENTION
 
 The answer should be well-structured and easy to read, with subheadings and bullet points as appropriate.
 Subsection should be indented under main headings.
-Whenever recommending courses and listing their description, format as:
-"
-I. General category or Major Requirements (If applicable) <- this is main heading and should be bolded
-1. COURSE_CODE: Course Title (Credits) <- this should also be bolded
-    - Course description...
-    - Other details...
-    (here if there are fewer than 2 bullet points, omit the dash and just put the description next to the course title line)"
-Make sure to follow this format  (including indentation, and make sure that the details are on seperate lines).
-Don't leaeve any extra empty lines in the final response.
+Whenever recommending courses and listing their description, use EXACTLY this markdown format:
+
+**I. General category or Major Requirements** (if applicable)
+
+**1. COURSE_CODE: Course Title (Credits)**
+   - Course description...
+   - Other details...
+
+If a course has only one detail, still put it on its own indented line with a dash.
+
+For comparison or general information responses with multiple sections, use this format:
+
+**Section Title (e.g., Focus Area):**
+- Detail or point about first item...
+- Detail or point about second item...
+
+Make sure to follow this format (including indentation, and make sure that the details are on separate lines).
+Don't leave any extra empty lines in the final response.
 
 FINAL CHECK BEFORE ANSWERING
 Before sending your answer, mentally verify:

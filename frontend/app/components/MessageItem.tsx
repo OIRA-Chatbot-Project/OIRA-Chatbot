@@ -23,7 +23,7 @@ export default function MessageItem({ message, onFeedback, theme, animationEnabl
 
   const citationRegex = /\[[^\]]+?,\s*p\.\s*\d+\]/gi
   const rawContent = message.content || ''
-  const cleanedContent = rawContent.replace(citationRegex, '').replace(/ {2,}/g, ' ')
+  const cleanedContent = rawContent.replace(citationRegex, '').replace(/(?<=\S) {2,}/g, ' ')
 
   const totalChars = cleanedContent.length
   const displayedContent = shouldAnimate ? cleanedContent.slice(0, displayedCount) : cleanedContent
