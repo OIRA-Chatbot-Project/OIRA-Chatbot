@@ -26,6 +26,7 @@ export default function ChatInterface({
   const { getToken } = useAuth()
   const [messages, setMessages] = useState<Message[]>([])
   const [isLoading, setIsLoading] = useState(false)
+  const [isLoadingHistory, setIsLoadingHistory] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const [seenMessageIds, setSeenMessageIds] = useState<Set<number>>(new Set())
@@ -94,6 +95,8 @@ export default function ChatInterface({
       }
     } catch (err) {
       console.error('Failed to load conversation history:', err)
+    } finally {
+      setIsLoadingHistory(false)
     }
   }
 
@@ -489,7 +492,7 @@ export default function ChatInterface({
             : 'bg-gradient-to-b from-white/60 to-slate-50'
         }`}
       >
-        {messages.length === 0 && !isLoading && (
+        {messages.length === 0 && !isLoading && !isLoadingHistory && (
           <div className="flex flex-col items-center justify-center min-h-full text-center py-8">
             <div className="max-w-lg px-4">
               <h2
