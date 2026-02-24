@@ -27,13 +27,13 @@ class ChatbotService:
         # Initialize a separate LLM for query decomposition (lower temperature)
         self.decompose_llm = ChatOpenAI(
             temperature=0.1,
-            model=config.OPENAI_MODEL
+            model=config.OPENAI_LIGHT_MODEL
         )
 
         # Initialize a separate LLM for question classification (very low temperature)
         self.classifier_llm = ChatOpenAI(
             temperature=config.QUESTION_CLASSIFIER_TEMPERATURE,
-            model=config.OPENAI_MODEL
+            model=config.OPENAI_LIGHT_MODEL
         )
 
         # Connect to ChromaDB
