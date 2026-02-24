@@ -78,16 +78,18 @@ async def chat(
 
         # Remove inline bracket citations like "[filename, p. 123]" from the answer
         try:
-            # Normalize spacing artifacts (e.g., "59 ." -> "59.")
-            cleaned_answer = re.sub(r"\s+([,.;:!?])", r"\1", answer)
+            # 1. Remove citations first (may leave trailing spaces before punctuation)
             cleaned_answer = re.sub(r"\[[^\]]+?,\s*p\.\s*\d+\]", "", answer)
-            # Collapse excessive blank lines but preserve markdown line breaks
+            # 2. Normalize spacing artifacts AFTER citation removal (e.g., "59 ." -> "59.")
+            cleaned_answer = re.sub(r"\s+([,.;:!?])", r"\1", cleaned_answer)
+            # 3. Collapse excessive blank lines but preserve markdown line breaks
             cleaned_answer = re.sub(r"\n{3,}", "\n\n", cleaned_answer)
-            # Collapse only repeated spaces/tabs (not newlines) to avoid flattening lists
-            cleaned_answer = re.sub(r"[ \t]{2,}", " ", cleaned_answer)
+            # 4. Collapse repeated spaces/tabs within lines only (preserve leading indentation)
+            cleaned_answer = re.sub(r"(?<=\S)[ \t]{2,}", " ", cleaned_answer)
             cleaned_answer = cleaned_answer.strip()
         except Exception:
             cleaned_answer = answer
+
 
         assistant_message = DBMessage(
             session_id=request.session_id,
