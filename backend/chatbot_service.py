@@ -108,7 +108,7 @@ class ChatbotService:
         # Fallback to catalog (safer than rejecting)
         return "course_catalog"
 
-    def _get_document_url(self, source_filename: str, page: int, source_url: Optional[str] = None) -> str:
+    def _get_document_url(self, source_filename: str, page: int, source_url: Optional[str] = None, doc_type: Optional[str] = None) -> Optional[str]:
         """
         This is for the Reference block under each answer.
         Generate appropriate URL for a document citation based on its source.
@@ -117,12 +117,15 @@ class ChatbotService:
             source_filename: Base filename (e.g., "GRADE REPLACEMENT POLICY.pdf")
             page: Page number (1-indexed)
             source_url: Optional external URL (e.g., Google Docs viewer link)
+            doc_type: Optional document type (e.g., "catalog", "policy")
 
         Returns:
             URL string for frontend to link to
         """
         if source_url:
             return source_url
+        if doc_type == "policy":
+            return None
 
         # Clean filename for URL (remove spaces, special chars)
         url_safe_filename = source_filename.replace(" ", "%20")
@@ -580,13 +583,21 @@ class ChatbotService:
             page = (meta.get("page", 0) or 0) + 1
             source_filename = os.path.basename(meta.get("source", "catalog.pdf"))
             doc_type = meta.get("doc_type", "catalog")
+            source_url = meta.get("source_url")
+
+            # Skip policy citations that do not have a Google Docs URL
+            if doc_type == "policy" and not source_url:
+                continue
 
             citation = {
                 "content": doc.page_content[:200] + "..." if len(doc.page_content) > 200 else doc.page_content,
                 "source": src,
                 "page": page,
-                "url": self._get_document_url(source_filename, page, meta.get("source_url")),
-                "doc_type": doc_type  # Include for frontend filtering/display
+                "url": self._get_document_url(source_filename, page, source_url, doc_type),
+                "doc_type": doc_type,  # Include for frontend filtering/display
+                # Preserve the raw filename so the frontend can link to local PDFs when
+                # no explicit `source_url` is available.
+                "filename": source_filename
             }
             citations.append(citation)
 

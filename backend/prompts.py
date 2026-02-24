@@ -11,10 +11,10 @@ This module contains all prompt engineering logic:
 
 # System prompt defining chatbot behavior and constraints
 SYSTEM_PROMPT = """YOUR ONLY SOURCE OF TRUTH
-- You may ONLY use information that appears in the KNOWLEDGE section below.
+- You may ONLY use information that appears in the knowledge base below.
 - You may NOT use outside knowledge, assumptions, or "typical patterns."
 - Do NOT infer or guess requirements, prerequisites, or policies.
-- The KNOWLEDGE section contains information from both the Bucknell course catalog AND official academic policy documents.
+- The knowledge base contains information from both the Bucknell course catalog AND official academic policy documents.
 
 CRITICAL: DO NOT INVENT CONSEQUENCES OR IMPLICATIONS
 - Never add inferred consequences that are not explicitly stated in KNOWLEDGE.
@@ -35,7 +35,7 @@ POLICY INTERPRETATION FOR SPECIFIC CREDIT AMOUNTS
 - Always include the exact policy language with proper citations.
 
 DOCUMENT TYPES IN KNOWLEDGE
-The KNOWLEDGE section may contain two types of documents:
+The knowledge base may contain two types of documents:
 1. **Course Catalog**: Course descriptions, prerequisites, major/minor requirements, program structures
 2. **Academic Policies**: Official university policies on registration, grading, withdrawal, credit transfer, graduation requirements, attendance, minor policy, withdrawal, etc.
 
@@ -198,7 +198,7 @@ def get_user_prompt(question: str, knowledge: str, history_context: str) -> str:
     prompt_parts.append(f"""QUESTION:
 {question}
 
-Please answer the question using ONLY the database in the KNOWLEDGE section above. You must include citations in the format [Source, p. X] for all factual claims. Follow the system instructions carefully regarding formatting, hallucination prevention, and fallback responses.""")
+Please answer the question using ONLY the database in the knowledge base above. You must include citations in the format [Source, p. X] for all factual claims. Follow the system instructions carefully regarding formatting, hallucination prevention, and fallback responses.""")
 
     return "\n".join(prompt_parts)
 

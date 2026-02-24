@@ -263,16 +263,38 @@ export default function MessageItem({ message, onFeedback, theme, animationEnabl
                           : 'bg-white text-gray-600 border-gray-200'
                       }`}
                     >
-                      {/* 🔗 FIXED: Dynamic PDF link */}
+                      {/* 🔗 Link to source document (PDF or Google Doc) */}
                       <div className="font-medium">
-                        <a
-                          href={`${typeof window !== 'undefined' ? window.location.origin : ''}/catalog.pdf#page=${citation.page}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="underline text-blue-500 hover:text-blue-600"
-                        >
-                          [{citation.source}, p. {citation.page}]
-                        </a>
+                        {citation.doc_type === 'policy' ? (
+                          citation.url ? (
+                            <a
+                              href={citation.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="underline text-blue-500 hover:text-blue-600"
+                            >
+                              [{citation.source}, p. {citation.page}]
+                            </a>
+                          ) : (
+                            <span>[{citation.source}, p. {citation.page}]</span>
+                          )
+                        ) : (
+                          <a
+                            href={
+                              citation.url
+                                ? citation.url
+                                : `${typeof window !== 'undefined' ? window.location.origin : ''}/${encodeURIComponent(
+                                    // Use filename when available; fall back to friendly source label
+                                    (citation.filename || citation.source)
+                                  )}#page=${citation.page}`
+                            }
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="underline text-blue-500 hover:text-blue-600"
+                          >
+                            [{citation.source}, p. {citation.page}]
+                          </a>
+                        )}
                       </div>
 
                       <div

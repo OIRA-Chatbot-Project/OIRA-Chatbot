@@ -162,7 +162,15 @@ pdf_documents = []
 if not config.GOOGLE_DOCS_ONLY:
     loader = PyPDFDirectoryLoader(DATA_PATH)
     pdf_documents = loader.load()
-    print(f"Loaded {len(pdf_documents)} raw pages from {DATA_PATH}")
+    # Keep only catalog PDFs; policy docs should come from Google Docs
+    filtered_pdfs = []
+    for doc in pdf_documents:
+        source_path = doc.metadata.get("source", "")
+        filename = os.path.basename(source_path)
+        if classify_document_type(filename) == "catalog":
+            filtered_pdfs.append(doc)
+    pdf_documents = filtered_pdfs
+    print(f"Loaded {len(pdf_documents)} catalog pages from {DATA_PATH}")
 
 # Load Google Docs (if configured)
 google_docs = load_google_docs()

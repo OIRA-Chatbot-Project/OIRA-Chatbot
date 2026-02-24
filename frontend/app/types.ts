@@ -2,6 +2,9 @@ export interface Citation {
   content: string
   source: string
   page: number | null
+  url?: string
+  filename?: string
+  doc_type?: 'catalog' | 'policy' | string
 }
 
 export interface Message {
