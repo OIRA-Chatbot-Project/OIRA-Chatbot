@@ -18,6 +18,13 @@ interface SidebarProps {
   disableNewChat?: boolean
 }
 
+const formatDate = (timestamp: string | undefined): string => {
+  if (!timestamp) return ''
+  const date = new Date(timestamp)
+  if (isNaN(date.getTime())) return ''
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
 export default function Sidebar({
   sessions,
   currentSessionId,
