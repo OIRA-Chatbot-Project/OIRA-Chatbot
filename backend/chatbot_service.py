@@ -2,10 +2,10 @@ from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_chroma import Chroma
 from langchain_core.messages import SystemMessage, HumanMessage
 from typing import List, Dict, Tuple, Optional
+import asyncio
 import os
 import re
 import json
-import re
 import config
 from prompts import get_decompose_prompt, get_user_prompt, get_contextualize_prompt, get_question_classifier_prompt, SYSTEM_PROMPT
 import math
@@ -296,6 +296,78 @@ class ChatbotService:
         print(f"[INFO] Final document distribution: {dict(zip(range(1, num_subqueries+1), docs_count_per_query))}")
         return all_docs
 
+    async def _retrieve_single_query_async(self, query: str, doc_type_filter: Optional[str] = None) -> List:
+        """Run a single retrieval call in a thread for async usage."""
+        try:
+            if doc_type_filter:
+                return await asyncio.to_thread(
+                    self.vector_store.similarity_search,
+                    query, k=config.RETRIEVER_K,
+                    filter={"doc_type": doc_type_filter}
+                )
+            else:
+                return await asyncio.to_thread(self.retriever.invoke, query)
+        except Exception as e:
+            print(f"[WARNING] Async retrieval failed for query '{query}': {e}")
+            return []
+
+    async def _retrieve_for_subqueries_async(self, sub_questions: List[str], doc_type_filter: Optional[str] = None) -> List:
+        """
+        Async version of _retrieve_for_subqueries — fires all sub-question
+        retrievals in parallel, then applies the same Phase 1 + Phase 2 merge logic.
+        """
+        num_subqueries = len(sub_questions)
+        if num_subqueries == 0:
+            return []
+
+        # Fire all retrievals in parallel
+        tasks = [self._retrieve_single_query_async(sq, doc_type_filter) for sq in sub_questions]
+        docs_per_question = await asyncio.gather(*tasks)
+
+        # Calculate adaptive retrieval limits
+        min_per_query = config.MIN_DOCS_PER_SUBQUERY
+        total_min = min_per_query * num_subqueries
+
+        if total_min > config.MAX_MULTI_STEP_DOCS:
+            min_per_query = max(2, config.MAX_MULTI_STEP_DOCS // num_subqueries)
+            print(f"[INFO] Many sub-questions ({num_subqueries}). Adjusting to {min_per_query} docs minimum per query.")
+
+        # Phase 1: Guarantee minimum documents per sub-question
+        all_docs = []
+        seen_keys = set()
+        docs_count_per_query = [0] * num_subqueries
+
+        for idx, docs in enumerate(docs_per_question):
+            for doc in docs[:min_per_query]:
+                meta = doc.metadata or {}
+                key = (meta.get("source", ""), meta.get("page", 0))
+                if key not in seen_keys:
+                    seen_keys.add(key)
+                    all_docs.append(doc)
+                    docs_count_per_query[idx] += 1
+                    if len(all_docs) >= config.MAX_MULTI_STEP_DOCS:
+                        return all_docs
+
+        # Phase 2: Round-robin for remaining slots
+        max_per_question = max(len(docs) for docs in docs_per_question) if docs_per_question else 0
+
+        for i in range(min_per_query, max_per_question):
+            for idx, docs in enumerate(docs_per_question):
+                if i < len(docs):
+                    doc = docs[i]
+                    meta = doc.metadata or {}
+                    key = (meta.get("source", ""), meta.get("page", 0))
+                    if key not in seen_keys:
+                        seen_keys.add(key)
+                        all_docs.append(doc)
+                        docs_count_per_query[idx] += 1
+                        if len(all_docs) >= config.MAX_MULTI_STEP_DOCS:
+                            print(f"[INFO] Document distribution: {dict(zip(range(1, num_subqueries+1), docs_count_per_query))}")
+                            return all_docs
+
+        print(f"[INFO] Final document distribution: {dict(zip(range(1, num_subqueries+1), docs_count_per_query))}")
+        return all_docs
+
     def _merge_docs(self, base_docs: List, extra_docs: List) -> List:
         """Merge document lists, de-duplicating by (source, page)."""
         merged = list(base_docs)
@@ -349,6 +421,41 @@ class ChatbotService:
             print(f"[WARNING] Contextualization failed: {e}. Using original question.")
         
         return question
+
+    def _is_simple_query(self, question: str) -> bool:
+        """
+        Heuristic check to determine if a query is simple enough to skip decomposition.
+        Simple queries are short, single-topic questions without multi-part markers.
+        """
+        words = question.split()
+        if len(words) > config.SIMPLE_QUERY_MAX_WORDS:
+            return False
+
+        q_lower = question.lower()
+
+        # Multi-part markers indicate complex queries
+        multi_part_markers = [
+            " and ", " vs ", " versus ", "compare", "difference between",
+            "both", "each", "as well as",
+        ]
+        if any(marker in q_lower for marker in multi_part_markers):
+            return False
+
+        # Multiple question marks suggest multiple questions
+        if question.count("?") > 1:
+            return False
+
+        # Multiple course codes suggest a comparison
+        course_codes = re.findall(r"[A-Z]{3,4}\s*\d{3}", question)
+        if len(course_codes) > 1:
+            return False
+
+        # Listing patterns indicate multi-part questions
+        listing_patterns = [r"\b\d+\.", r"\bfirst\b", r"\bsecond\b", r"\bthird\b"]
+        if any(re.search(pat, q_lower) for pat in listing_patterns):
+            return False
+
+        return True
 
     def _is_sequence_question(self, question: str) -> bool:
         """Heuristic check for questions asking about a major/course sequence or plan."""
@@ -488,7 +595,11 @@ class ChatbotService:
             print(f"[INFO] Search query: {search_query}")
 
             # STEP 4: Decompose query if needed and enabled
-            if use_multi_step:
+            simple = self._is_simple_query(search_query)
+            if simple:
+                print(f"[INFO] Simple query detected, skipping decomposition")
+
+            if use_multi_step and not simple:
                 sub_questions = self._decompose_query(search_query)
                 print(f"[INFO] Sub-questions: {len(sub_questions)}")
 
@@ -669,6 +780,367 @@ class ChatbotService:
             "Consider prerequisites and avoid recommending courses that appear to already be completed."
         )
         return self.get_answer(question, conversation_history)
+
+    async def get_answer_async(self, question: str, conversation_history: List[Dict[str, str]], use_multi_step: Optional[bool] = None) -> Tuple[str, List[Dict], str, List[str]]:
+        """
+        Async version of get_answer that parallelizes classification and contextualization.
+        Returns the same tuple: (answer, citations, question_category, followups)
+        """
+        # STEP 1 & 2: Run classification and contextualization in parallel
+        classify_task = asyncio.to_thread(self._classify_question, question)
+        context_task = asyncio.to_thread(self._build_contextual_query, question, conversation_history)
+
+        results = await asyncio.gather(classify_task, context_task, return_exceptions=True)
+
+        # Handle classification result
+        if isinstance(results[0], Exception):
+            print(f"[WARNING] Async classification failed: {results[0]}. Defaulting to 'course_catalog'")
+            question_category = "course_catalog"
+        else:
+            question_category = results[0]
+
+        # Handle contextualization result
+        if isinstance(results[1], Exception):
+            print(f"[WARNING] Async contextualization failed: {results[1]}. Using original question.")
+            search_query = question
+        else:
+            search_query = results[1]
+
+        # Reject off-topic questions immediately
+        if question_category == "off_topic":
+            print(f"[OFF-TOPIC] Question rejected: {question}")
+            return (config.OFF_TOPIC_MESSAGE, [], "off_topic", [])
+
+        # Determine document type filter
+        doc_type_filter = None
+        if question_category == "course_catalog":
+            doc_type_filter = "catalog"
+        elif question_category == "academic_policy":
+            doc_type_filter = "policy"
+
+        print(f"[INFO] Filtering retrieval to doc_type: {doc_type_filter}")
+
+        try:
+            if use_multi_step is None:
+                use_multi_step = config.USE_MULTI_STEP_QUERY
+
+            print(f"[INFO] Retrieval start | category={question_category} | multi_step={use_multi_step}")
+            print(f"[INFO] Search query: {search_query}")
+
+            # STEP 3: Decompose query if needed
+            simple = self._is_simple_query(search_query)
+            if simple:
+                print(f"[INFO] Simple query detected, skipping decomposition")
+
+            if use_multi_step and not simple:
+                sub_questions = await asyncio.to_thread(self._decompose_query, search_query)
+                print(f"[INFO] Sub-questions: {len(sub_questions)}")
+
+                if len(sub_questions) > 1:
+                    print(f"\n[DECOMPOSITION] Query Decomposition:")
+                    print(f"Original: {question}")
+                    print(f"Contextualized: {search_query}")
+                    print(f"Number of sub-questions: {len(sub_questions)}")
+                    for i, sq in enumerate(sub_questions, 1):
+                        print(f"  {i}. {sq}")
+                    if len(sub_questions) >= 4:
+                        print(f"[WARNING] High number of sub-questions ({len(sub_questions)}). Results may be limited per topic.")
+
+                # Expand sequence questions
+                if question_category == "course_catalog" and self._is_sequence_question(question):
+                    expanded = self._expand_sequence_queries(search_query, question)
+                    sub_questions = sub_questions + expanded
+                    if len(sub_questions) > 8:
+                        sub_questions = sub_questions[:8]
+
+                # STEP 4: Parallel retrieval
+                docs = await self._retrieve_for_subqueries_async(sub_questions, doc_type_filter)
+            else:
+                # Single-step retrieval
+                if doc_type_filter:
+                    docs = await asyncio.to_thread(
+                        self.vector_store.similarity_search,
+                        search_query, k=config.RETRIEVER_K,
+                        filter={"doc_type": doc_type_filter}
+                    )
+                else:
+                    docs = await asyncio.to_thread(self.retriever.invoke, search_query)
+
+            print(f"[INFO] Retrieved docs: {len(docs)}")
+
+            # Sequence questions: boost likely sections
+            if question_category == "course_catalog" and self._is_sequence_question(question):
+                section_filters = [
+                    {"section": "freeman_core"},
+                    {"section": "sequence"},
+                ]
+                boosted_docs = []
+                for f in section_filters:
+                    filt = {"$and": [{"doc_type": "catalog"}, f]}
+                    boost = await asyncio.to_thread(
+                        self.vector_store.similarity_search,
+                        search_query, k=max(6, config.RETRIEVER_K // 2),
+                        filter=filt
+                    )
+                    boosted_docs.extend(boost)
+                if boosted_docs:
+                    docs = self._merge_docs(docs, boosted_docs)
+                    print(f"[INFO] Boosted docs added: {len(boosted_docs)}")
+                    print(f"[INFO] Retrieved docs (after boost): {len(docs)}")
+
+            if not docs:
+                fallback_message = (
+                    "I'm not seeing that information in the documents I have, but I'm happy to help with anything else! "
+                    "For official guidance and questions about how these policies apply to your specific situation, please consult with your academic advisor or the Office of the Registrar."
+                )
+                return (fallback_message, [], question_category, [])
+
+        except Exception as e:
+            print(f"[ERROR] Retrieval error: {e}")
+            return (
+                "Sorry, I ran into an error retrieving information. Please try again later or contact support.",
+                [], question_category, []
+            )
+
+        # Build knowledge and citations
+        knowledge = self._prepare_knowledge(docs)
+        print(f"[INFO] Knowledge length: {len(knowledge)}")
+
+        citations = []
+        for doc in docs:
+            meta = doc.metadata or {}
+            src = self._short_source(meta.get("source", "Catalogue"))
+            page = (meta.get("page", 0) or 0) + 1
+            source_filename = os.path.basename(meta.get("source", "catalog.pdf"))
+            doc_type = meta.get("doc_type", "catalog")
+            citation = {
+                "content": doc.page_content[:200] + "..." if len(doc.page_content) > 200 else doc.page_content,
+                "source": src,
+                "page": page,
+                "url": self._get_document_url(source_filename, page, meta.get("source_url")),
+                "doc_type": doc_type,
+            }
+            citations.append(citation)
+
+        # Format conversation history
+        history_context = ""
+        if conversation_history:
+            history_context = "\n".join([
+                f"{msg['role'].capitalize()}: {msg['content'][:300]}"
+                for msg in conversation_history[-6:]
+            ])
+
+        user_prompt = get_user_prompt(question, knowledge, history_context if conversation_history else "")
+
+        try:
+            messages = [
+                SystemMessage(content=SYSTEM_PROMPT),
+                HumanMessage(content=user_prompt)
+            ]
+            response = await asyncio.to_thread(self.llm.invoke, messages)
+            answer = self._normalize_text((response.content or "").strip())
+
+            fallback_sentence = (
+                "I'm not seeing that information in the documents I have, but I'm happy to help with anything else!"
+                "For official guidance and questions about how these policies apply to your specific situation, please consult with your academic advisor or the Office of the Registrar.")
+            if not answer:
+                answer = fallback_sentence
+            elif fallback_sentence in answer and citations and len(citations) > 0:
+                if answer.strip() != fallback_sentence:
+                    answer = answer.replace(fallback_sentence, '').strip()
+                if not answer:
+                    answer = fallback_sentence
+
+            if question_category == "academic_policy" and answer != fallback_sentence:
+                answer = answer + config.POLICY_DISCLAIMER
+
+            # Generate follow-ups off the critical path (via thread)
+            if answer == fallback_sentence:
+                followups: List[str] = []
+            else:
+                followups = await asyncio.to_thread(self._generate_followups, question, answer, conversation_history)
+
+            return answer, citations, question_category, followups  # type: ignore
+
+        except Exception as e:
+            print(f"[ERROR] LLM generation error: {e}")
+            return (
+                "Sorry, I encountered an error generating a response. "
+                "Please try again or contact your academic advisor.",
+                citations, question_category, []
+            )
+
+    async def get_answer_streaming(self, question: str, conversation_history: List[Dict[str, str]], use_multi_step: Optional[bool] = None):
+        """
+        Async generator that yields SSE-formatted events for streaming responses.
+        Events: metadata, token, followups, done
+        """
+        import json as _json
+
+        # STEP 1: Parallel classification + contextualization
+        classify_task = asyncio.to_thread(self._classify_question, question)
+        context_task = asyncio.to_thread(self._build_contextual_query, question, conversation_history)
+        results = await asyncio.gather(classify_task, context_task, return_exceptions=True)
+
+        question_category = results[0] if not isinstance(results[0], Exception) else "course_catalog"
+        search_query = results[1] if not isinstance(results[1], Exception) else question
+
+        if isinstance(results[0], Exception):
+            print(f"[WARNING] Async classification failed: {results[0]}")
+        if isinstance(results[1], Exception):
+            print(f"[WARNING] Async contextualization failed: {results[1]}")
+
+        # Off-topic rejection
+        if question_category == "off_topic":
+            print(f"[OFF-TOPIC] Question rejected: {question}")
+            yield f"event: metadata\ndata: {_json.dumps({'category': 'off_topic', 'citations': []})}\n\n"
+            # Send the full off-topic message as a single token event
+            yield f"event: token\ndata: {_json.dumps({'token': config.OFF_TOPIC_MESSAGE})}\n\n"
+            yield f"event: done\ndata: {_json.dumps({})}\n\n"
+            return
+
+        doc_type_filter = None
+        if question_category == "course_catalog":
+            doc_type_filter = "catalog"
+        elif question_category == "academic_policy":
+            doc_type_filter = "policy"
+
+        # STEP 2: Retrieval (reuse async logic from get_answer_async)
+        try:
+            if use_multi_step is None:
+                use_multi_step = config.USE_MULTI_STEP_QUERY
+
+            simple = self._is_simple_query(search_query)
+            if simple:
+                print(f"[INFO] Simple query detected, skipping decomposition")
+
+            if use_multi_step and not simple:
+                sub_questions = await asyncio.to_thread(self._decompose_query, search_query)
+
+                if question_category == "course_catalog" and self._is_sequence_question(question):
+                    expanded = self._expand_sequence_queries(search_query, question)
+                    sub_questions = sub_questions + expanded
+                    if len(sub_questions) > 8:
+                        sub_questions = sub_questions[:8]
+
+                docs = await self._retrieve_for_subqueries_async(sub_questions, doc_type_filter)
+            else:
+                if doc_type_filter:
+                    docs = await asyncio.to_thread(
+                        self.vector_store.similarity_search,
+                        search_query, k=config.RETRIEVER_K,
+                        filter={"doc_type": doc_type_filter}
+                    )
+                else:
+                    docs = await asyncio.to_thread(self.retriever.invoke, search_query)
+
+            # Sequence boost
+            if question_category == "course_catalog" and self._is_sequence_question(question):
+                section_filters = [{"section": "freeman_core"}, {"section": "sequence"}]
+                boosted_docs = []
+                for f in section_filters:
+                    filt = {"$and": [{"doc_type": "catalog"}, f]}
+                    boost = await asyncio.to_thread(
+                        self.vector_store.similarity_search,
+                        search_query, k=max(6, config.RETRIEVER_K // 2), filter=filt
+                    )
+                    boosted_docs.extend(boost)
+                if boosted_docs:
+                    docs = self._merge_docs(docs, boosted_docs)
+
+            if not docs:
+                fallback = (
+                    "I'm not seeing that information in the documents I have, but I'm happy to help with anything else! "
+                    "For official guidance and questions about how these policies apply to your specific situation, "
+                    "please consult with your academic advisor or the Office of the Registrar."
+                )
+                yield f"event: metadata\ndata: {_json.dumps({'category': question_category, 'citations': []})}\n\n"
+                yield f"event: token\ndata: {_json.dumps({'token': fallback})}\n\n"
+                yield f"event: done\ndata: {_json.dumps({})}\n\n"
+                return
+
+        except Exception as e:
+            print(f"[ERROR] Retrieval error: {e}")
+            error_msg = "Sorry, I ran into an error retrieving information. Please try again later or contact support."
+            yield f"event: metadata\ndata: {_json.dumps({'category': question_category, 'citations': []})}\n\n"
+            yield f"event: token\ndata: {_json.dumps({'token': error_msg})}\n\n"
+            yield f"event: done\ndata: {_json.dumps({})}\n\n"
+            return
+
+        # Build knowledge + citations
+        knowledge = self._prepare_knowledge(docs)
+        citations = []
+        for doc in docs:
+            meta = doc.metadata or {}
+            src = self._short_source(meta.get("source", "Catalogue"))
+            page = (meta.get("page", 0) or 0) + 1
+            source_filename = os.path.basename(meta.get("source", "catalog.pdf"))
+            doc_type = meta.get("doc_type", "catalog")
+            citations.append({
+                "content": doc.page_content[:200] + "..." if len(doc.page_content) > 200 else doc.page_content,
+                "source": src, "page": page,
+                "url": self._get_document_url(source_filename, page, meta.get("source_url")),
+                "doc_type": doc_type,
+            })
+
+        # STEP 3: Send metadata event (citations, category) before streaming
+        yield f"event: metadata\ndata: {_json.dumps({'category': question_category, 'citations': citations})}\n\n"
+
+        # Build prompt
+        history_context = ""
+        if conversation_history:
+            history_context = "\n".join([
+                f"{msg['role'].capitalize()}: {msg['content'][:300]}"
+                for msg in conversation_history[-6:]
+            ])
+        user_prompt = get_user_prompt(question, knowledge, history_context if conversation_history else "")
+
+        messages = [
+            SystemMessage(content=SYSTEM_PROMPT),
+            HumanMessage(content=user_prompt)
+        ]
+
+        # STEP 4: Stream tokens via LangChain's astream
+        full_answer = ""
+        try:
+            async for chunk in self.llm.astream(messages):
+                token = chunk.content or ""
+                if token:
+                    full_answer += token
+                    yield f"event: token\ndata: {_json.dumps({'token': token})}\n\n"
+        except Exception as e:
+            print(f"[ERROR] Streaming LLM error: {e}")
+            if not full_answer:
+                error_msg = "Sorry, I encountered an error generating a response. Please try again or contact your academic advisor."
+                yield f"event: token\ndata: {_json.dumps({'token': error_msg})}\n\n"
+                full_answer = error_msg
+
+        # Post-processing on the full answer
+        answer = self._normalize_text(full_answer.strip())
+
+        fallback_sentence = (
+            "I'm not seeing that information in the documents I have, but I'm happy to help with anything else!"
+            "For official guidance and questions about how these policies apply to your specific situation, "
+            "please consult with your academic advisor or the Office of the Registrar.")
+
+        # Add policy disclaimer if needed (sent as final token)
+        if question_category == "academic_policy" and answer != fallback_sentence:
+            yield f"event: token\ndata: {_json.dumps({'token': config.POLICY_DISCLAIMER})}\n\n"
+            answer = answer + config.POLICY_DISCLAIMER
+
+        # Generate follow-ups after stream completes
+        if answer and answer != fallback_sentence:
+            try:
+                followups = await asyncio.to_thread(self._generate_followups, question, answer, conversation_history)
+                yield f"event: followups\ndata: {_json.dumps({'follow_ups': followups})}\n\n"
+            except Exception as e:
+                print(f"[WARNING] Follow-up generation failed: {e}")
+                yield f"event: followups\ndata: {_json.dumps({'follow_ups': []})}\n\n"
+        else:
+            yield f"event: followups\ndata: {_json.dumps({'follow_ups': []})}\n\n"
+
+        # Yield the done event — the route handler will save to DB and send `saved` event
+        yield f"event: done\ndata: {_json.dumps({'answer': answer, 'citations': citations, 'category': question_category})}\n\n"
 
 
 # Global instance with lazy initialization

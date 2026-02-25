@@ -34,6 +34,7 @@ RETRIEVER_FETCH_K = int(os.getenv("RETRIEVER_FETCH_K", "80"))  # Candidates for 
 RETRIEVER_LAMBDA_MULT = float(os.getenv("RETRIEVER_LAMBDA_MULT", "0.4"))  # MMR diversity (0=diverse, 1=similar)
 MAX_MULTI_STEP_DOCS = int(os.getenv("MAX_MULTI_STEP_DOCS", "30"))  # Max docs for multi-step queries
 MIN_DOCS_PER_SUBQUERY = int(os.getenv("MIN_DOCS_PER_SUBQUERY", "4"))  # Minimum docs per sub-question
+SIMPLE_QUERY_MAX_WORDS = int(os.getenv("SIMPLE_QUERY_MAX_WORDS", "15"))  # Max words for simple query heuristic
 
 # ChromaDB Configuration
 CHROMA_COLLECTION_NAME = os.getenv("CHROMA_COLLECTION_NAME", "bucknell_catalogue")

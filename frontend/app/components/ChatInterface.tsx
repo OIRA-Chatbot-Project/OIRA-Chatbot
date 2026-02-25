@@ -136,6 +136,160 @@ export default function ChatInterface({
     }
   }
 
+  const ENABLE_STREAMING = true
+
+  const sendMessageStreaming = async (content: string, token: string, isFirstMessage: boolean, placeholderId: number) => {
+    const response = await fetch(`${API_URL}/chat/stream`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        session_id: sessionId,
+        message: content,
+      }),
+    })
+
+    if (!response.ok) {
+      throw new Error('Failed to send message')
+    }
+
+    const reader = response.body?.getReader()
+    if (!reader) throw new Error('No response body')
+
+    const decoder = new TextDecoder()
+    let buffer = ''
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+
+      // Parse SSE events from buffer
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || '' // Keep incomplete line in buffer
+
+      let eventType = ''
+      for (const line of lines) {
+        if (line.startsWith('event: ')) {
+          eventType = line.slice(7).trim()
+        } else if (line.startsWith('data: ') && eventType) {
+          try {
+            const data = JSON.parse(line.slice(6))
+
+            switch (eventType) {
+              case 'metadata':
+                // Set citations and category on the placeholder message
+                setMessages(prev => prev.map(msg =>
+                  msg.id === placeholderId
+                    ? { ...msg, citations: data.citations || [] }
+                    : msg
+                ))
+                break
+
+              case 'token':
+                // Append token to the placeholder message content
+                setMessages(prev => prev.map(msg =>
+                  msg.id === placeholderId
+                    ? { ...msg, content: msg.content + (data.token || '') }
+                    : msg
+                ))
+                break
+
+              case 'followups':
+                setMessages(prev => prev.map(msg =>
+                  msg.id === placeholderId
+                    ? { ...msg, follow_ups: data.follow_ups || [] }
+                    : msg
+                ))
+                break
+
+              case 'saved':
+                // Update the placeholder ID with the real DB message ID
+                if (data.message_id) {
+                  setMessages(prev => prev.map(msg =>
+                    msg.id === placeholderId
+                      ? { ...msg, id: data.message_id }
+                      : msg
+                  ))
+                  setSeenMessageIds(prev => {
+                    const next = new Set(prev)
+                    next.delete(placeholderId)
+                    next.add(data.message_id)
+                    return next
+                  })
+                }
+                break
+
+              case 'error':
+                throw new Error(data.error || 'Stream error')
+
+              case 'done':
+                // Stream complete
+                break
+            }
+          } catch (parseErr) {
+            // Skip malformed JSON lines
+            if (eventType === 'error') throw parseErr
+          }
+          eventType = ''
+        }
+      }
+    }
+
+    // Disable animation for streamed messages (tokens already arrive progressively)
+    setAnimateMessageId(undefined)
+
+    if (isFirstMessage) {
+      notifySessionTitle(content)
+      onSessionHasMessages?.(sessionId)
+    }
+  }
+
+  const sendMessageNonStreaming = async (content: string, token: string, isFirstMessage: boolean) => {
+    const response = await fetch(`${API_URL}/chat`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        session_id: sessionId,
+        message: content,
+      }),
+    })
+
+    if (!response.ok) {
+      throw new Error('Failed to send message')
+    }
+
+    const data = await response.json()
+
+    const assistantMessage: Message = {
+      id: data.message_id,
+      role: 'assistant',
+      content: data.answer,
+      citations: data.citations,
+      follow_ups: data.follow_ups || [],
+      created_at: new Date().toISOString(),
+    }
+    setMessages(prev => [...prev, assistantMessage])
+    setSeenMessageIds(prev => {
+      const next = new Set(prev)
+      next.add(assistantMessage.id)
+      return next
+    })
+    const shouldAnimateAssistant = animationEnabled && !seenMessageIds.has(assistantMessage.id)
+    setAnimateMessageId(shouldAnimateAssistant ? assistantMessage.id : undefined)
+
+    if (isFirstMessage) {
+      notifySessionTitle(content)
+      onSessionHasMessages?.(sessionId)
+    }
+  }
+
   const sendMessage = async (content: string) => {
     // Add user message to UI
     const userMessage: Message = {
@@ -163,46 +317,30 @@ export default function ChatInterface({
         return
       }
 
-      const response = await fetch(`${API_URL}/chat`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          session_id: sessionId,
-          message: content,
-        }),
-      })
+      if (ENABLE_STREAMING) {
+        // Create a placeholder assistant message for progressive rendering
+        const placeholderId = Date.now() + 1
+        const placeholderMessage: Message = {
+          id: placeholderId,
+          role: 'assistant',
+          content: '',
+          citations: [],
+          follow_ups: [],
+          created_at: new Date().toISOString(),
+        }
+        setMessages(prev => [...prev, placeholderMessage])
+        setSeenMessageIds(prev => {
+          const next = new Set(prev)
+          next.add(placeholderId)
+          return next
+        })
+        // Disable animation — streaming tokens are already progressive
+        setAnimateMessageId(undefined)
+        setIsLoading(false) // Hide bouncing dots, the placeholder message is visible
 
-      if (!response.ok) {
-        throw new Error('Failed to send message')
-      }
-
-      const data = await response.json()
-
-      // Add assistant message to UI
-      const assistantMessage: Message = {
-        id: data.message_id,
-        role: 'assistant',
-        content: data.answer,
-        citations: data.citations,
-        follow_ups: data.follow_ups || [],
-        created_at: new Date().toISOString(),
-      }
-      setMessages(prev => [...prev, assistantMessage])
-      setSeenMessageIds(prev => {
-        const next = new Set(prev)
-        next.add(assistantMessage.id)
-        return next
-      })
-      const shouldAnimateAssistant = animationEnabled && !seenMessageIds.has(assistantMessage.id)
-      setAnimateMessageId(shouldAnimateAssistant ? assistantMessage.id : undefined)
-      
-      // Only save session after successful first exchange
-      if (isFirstMessage) {
-        notifySessionTitle(content)
-        onSessionHasMessages?.(sessionId)
+        await sendMessageStreaming(content, token, isFirstMessage, placeholderId)
+      } else {
+        await sendMessageNonStreaming(content, token, isFirstMessage)
       }
     } catch (err) {
       setError('Failed to get response. Please try again.')
