@@ -1,3 +1,15 @@
+import sys
+import os
+
+# Force UTF-8 encoding for stdout/stderr on Windows to prevent
+# 'charmap' codec errors when printing Unicode characters from LLM output
+if sys.platform == "win32":
+    os.environ.setdefault("PYTHONUTF8", "1")
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
