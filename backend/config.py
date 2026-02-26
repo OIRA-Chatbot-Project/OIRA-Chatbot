@@ -106,4 +106,4 @@ Please feel free to ask me any academic-related questions!"""
 POLICY_DISCLAIMER = """
 
 ---
-**Important Note:** This information is from official Bucknell academic policies, but policies may change. For official guidance and questions about how these policies apply to your specific situation, please consult with your academic advisor or the Office of the Registrar."""
+**Important Note:** This information is from official Bucknell official documents, but they may change over time. For official guidance and questions about how these policies apply to your specific situation, please consult with your academic advisor or the Office of the Registrar."""
