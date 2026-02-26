@@ -23,7 +23,10 @@ export default function MessageItem({ message, onFeedback, theme, animationEnabl
 
   const citationRegex = /\[[^\]]+?,\s*p\.\s*\d+\]/gi
   const rawContent = message.content || ''
-  const cleanedContent = rawContent.replace(citationRegex, '').replace(/(?<=\S) {2,}/g, ' ')
+  const cleanedContent = rawContent
+    .replace(citationRegex, '')
+    .replace(/\s+([,.;:!?])/g, '$1')
+    .replace(/(?<=\S) {2,}/g, ' ')
 
   const totalChars = cleanedContent.length
   const displayedContent = shouldAnimate ? cleanedContent.slice(0, displayedCount) : cleanedContent
@@ -181,7 +184,7 @@ export default function MessageItem({ message, onFeedback, theme, animationEnabl
             theme === 'dark' ? 'bg-slate-800 text-orange-200' : 'bg-primary text-white'
           }`}
         >
-          🤖
+          <span className="material-symbols-outlined text-[22px]">smart_toy</span>
         </div>
       )}
       
@@ -241,11 +244,14 @@ export default function MessageItem({ message, onFeedback, theme, animationEnabl
               >
                 <div className="flex items-center gap-2">
                   <span
-                    className={`text-base transform transition-transform ${citationsOpen ? 'rotate-90' : ''}`}
+                    className={`material-symbols-outlined text-[18px] transform transition-transform ${citationsOpen ? 'rotate-90' : ''}`}
                   >
-                    ▶
+                    chevron_right
                   </span>
-                  <span>📚 References ({message.citations.length})</span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-[16px]">menu_book</span>
+                    References ({message.citations.length})
+                  </span>
                 </div>
                 <span className="text-[11px] uppercase tracking-wide">
                   {citationsOpen ? 'Hide' : 'Show'}
@@ -353,7 +359,7 @@ export default function MessageItem({ message, onFeedback, theme, animationEnabl
                     : 'border-gray-200 text-gray-600 hover:bg-gray-100'
                 }`}
               >
-                🚩
+                <span className="material-symbols-outlined text-[18px]">flag</span>
               </button>
 
               <div className={`w-px h-4 ${theme === 'dark' ? 'bg-slate-700' : 'bg-gray-300'} opacity-60`}></div>
@@ -362,13 +368,13 @@ export default function MessageItem({ message, onFeedback, theme, animationEnabl
                 onClick={() => handleFeedback(1)}
                 className="text-gray-400 hover:text-green-500 transition-colors p-1"
               >
-                👍
+                <span className="material-symbols-outlined text-[18px]">thumb_up</span>
               </button>
               <button
                 onClick={() => handleFeedback(-1)}
                 className="text-gray-400 hover:text-red-500 transition-colors p-1"
               >
-                👎
+                <span className="material-symbols-outlined text-[18px]">thumb_down</span>
               </button>
             </div>
 
@@ -486,7 +492,10 @@ export default function MessageItem({ message, onFeedback, theme, animationEnabl
 
         {message.feedback && (
           <div className="mt-2 text-xs text-gray-500">
-            {message.feedback === 1 ? '👍 Marked as helpful' : '👎 Feedback submitted'}
+            {message.feedback === 1
+            ? <span className="flex items-center gap-1"><span className="material-symbols-outlined text-[14px]">thumb_up</span> Marked as helpful</span>
+            : <span className="flex items-center gap-1"><span className="material-symbols-outlined text-[14px]">thumb_down</span> Feedback submitted</span>
+          }
           </div>
         )}
 
@@ -501,7 +510,7 @@ export default function MessageItem({ message, onFeedback, theme, animationEnabl
             theme === 'dark' ? 'bg-slate-700 text-white' : 'bg-gray-200'
           }`}
         >
-          👤
+          <span className="material-symbols-outlined text-[22px]">person</span>
         </div>
       )}
     </div>
