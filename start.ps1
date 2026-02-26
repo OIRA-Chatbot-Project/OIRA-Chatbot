@@ -1,4 +1,4 @@
-Write-Host "================================" -ForegroundColor Cyan
+﻿Write-Host "================================" -ForegroundColor Cyan
 Write-Host "   OIRA Chatbot Startup" -ForegroundColor Cyan
 Write-Host "================================`n" -ForegroundColor Cyan
 
@@ -37,7 +37,7 @@ else {
 }
 
 # Install deps if fastapi missing
-python -c "import fastapi" 2>$null
+python -c "import fastapi" 2>&1 | Out-Null
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Installing Python dependencies..." -ForegroundColor Yellow
     pip install -r requirements.txt
@@ -46,7 +46,7 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host "✓ Starting FastAPI backend on http://localhost:8000" -ForegroundColor Green
 $backendProcess = Start-Process -FilePath "python" -ArgumentList "main.py" `
     -RedirectStandardOutput "..\backend.log" `
-    -RedirectStandardError "..\backend.log" `
+    -RedirectStandardError "..\backend-error.log" `
     -NoNewWindow -PassThru
 
 Set-Location ..
@@ -71,14 +71,21 @@ if (!(Test-Path "node_modules")) {
 }
 
 Write-Host "✓ Starting Next.js frontend on http://localhost:3000" -ForegroundColor Green
-$frontendProcess = Start-Process -FilePath "npm" -ArgumentList "run dev" `
+$frontendProcess = Start-Process -FilePath "cmd.exe" -ArgumentList "/c npm run dev" `
     -RedirectStandardOutput "..\frontend.log" `
-    -RedirectStandardError "..\frontend.log" `
+    -RedirectStandardError "..\frontend-error.log" `
     -NoNewWindow -PassThru
 
 Set-Location ..
 
 Start-Sleep -Seconds 5
+
+if ($frontendProcess.HasExited) {
+    Write-Host "❌ Frontend failed to start. Check frontend.log for details." -ForegroundColor Red
+    Get-Content frontend.log
+    Stop-Process -Id $backendProcess.Id -Force
+    exit 1
+}
 
 Write-Host "`n================================" -ForegroundColor Green
 Write-Host "   🎉 Both servers are running!" -ForegroundColor Green
