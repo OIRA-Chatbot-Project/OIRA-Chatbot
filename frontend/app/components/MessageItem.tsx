@@ -14,9 +14,19 @@ interface MessageItemProps {
   onFollowupClick?: (text: string) => void
 }
 
+const THINKING_MESSAGES = [
+  'Thinking...',
+  'Searching knowledge base...',
+  'Fetching details...',
+  'Reviewing course information...',
+  'Almost there...',
+]
+
 export default function MessageItem({ message, onFeedback, theme, animationEnabled = false, animate = false, onFollowupClick }: MessageItemProps) {
   const [displayedCount, setDisplayedCount] = useState(0)
   const [animationComplete, setAnimationComplete] = useState(false)
+  const [thinkingIndex, setThinkingIndex] = useState(0)
+  const [thinkingVisible, setThinkingVisible] = useState(true)
 
   const isAssistant = message.role === 'assistant'
   const shouldAnimate = animationEnabled && animate && isAssistant
@@ -62,6 +72,27 @@ export default function MessageItem({ message, onFeedback, theme, animationEnabl
       if (intervalId !== null) clearInterval(intervalId)
     }
   }, [message.id, animationEnabled, animate, totalChars, shouldAnimate])
+
+  const isThinking = isAssistant && !message.content?.trim()
+
+  // Cycle through thinking messages while waiting for first token
+  useEffect(() => {
+    if (!isThinking) return
+    setThinkingIndex(0)
+    setThinkingVisible(true)
+
+    const cycle = setInterval(() => {
+      // Fade out, then swap text, then fade in
+      setThinkingVisible(false)
+      setTimeout(() => {
+        setThinkingIndex(prev => (prev + 1) % THINKING_MESSAGES.length)
+        setThinkingVisible(true)
+      }, 300)
+    }, 2200)
+
+    return () => clearInterval(cycle)
+  }, [isThinking])
+
   const [showFeedbackNote, setShowFeedbackNote] = useState(false)
   const [feedbackNote, setFeedbackNote] = useState('')
   const [pendingRating, setPendingRating] = useState<number | null>(null)
@@ -214,17 +245,28 @@ export default function MessageItem({ message, onFeedback, theme, animationEnabl
                 : 'bg-white/90 text-gray-900 shadow-lg shadow-gray-200/60 border border-white/70'
           }`}
         >
-          {/* Renders the list syntax  (sections, bullets, numbered lists) to become HTML with nested hierarchy.*/}
-          <div ref={markdownContentRef} className={`markdown-content relative ${isUser ? 'text-white' : theme === 'dark' ? 'text-gray-100' : 'text-gray-900'}`}>
-            <div className="leading-normal">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {displayedContent}
-              </ReactMarkdown>
+          {/* Show cycling status text while waiting for first streaming token */}
+          {isThinking ? (
+            <span
+              className={`text-sm italic transition-opacity duration-300 ${
+                thinkingVisible ? 'opacity-100' : 'opacity-0'
+              } ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}
+            >
+              {THINKING_MESSAGES[thinkingIndex]}
+            </span>
+          ) : (
+            /* Renders the list syntax (sections, bullets, numbered lists) to become HTML with nested hierarchy. */
+            <div ref={markdownContentRef} className={`markdown-content relative ${isUser ? 'text-white' : theme === 'dark' ? 'text-gray-100' : 'text-gray-900'}`}>
+              <div className="leading-normal">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {displayedContent}
+                </ReactMarkdown>
+              </div>
+              {shouldAnimate && !animationComplete && (
+                <span className="inline-block animate-pulse ml-1">▌</span>
+              )}
             </div>
-            {shouldAnimate && !animationComplete && (
-              <span className="inline-block animate-pulse ml-1">▌</span>
-            )}
-          </div>
+          )}
           
           {message.citations && message.citations.length > 0 && (animationComplete || !shouldAnimate) && (
             <div
