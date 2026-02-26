@@ -544,7 +544,7 @@ export default function ChatInterface({
             }`}
             title="Settings"
           >
-            <span className="text-lg">⚙️</span>
+            <span className="material-symbols-outlined text-[20px]">settings</span>
           </button>
         </div>
       </header>
@@ -678,7 +678,7 @@ export default function ChatInterface({
                 theme === 'dark' ? 'bg-slate-800 text-orange-200' : 'bg-primary text-white'
               }`}
             >
-              🤖
+              <span className="material-symbols-outlined text-[22px]">smart_toy</span>
             </div>
             <div
               className={`flex-1 rounded-2xl p-4 ${

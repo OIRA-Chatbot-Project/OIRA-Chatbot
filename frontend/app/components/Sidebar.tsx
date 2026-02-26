@@ -202,7 +202,7 @@ export default function Sidebar({
           }`}
           title="Expand sidebar"
         >
-          ☰
+          <span className="material-symbols-outlined text-[20px]">menu</span>
         </button>
         <button
           onClick={() => {
@@ -214,7 +214,7 @@ export default function Sidebar({
           }`}
           title="Search chats"
         >
-          🔍
+          <span className="material-symbols-outlined text-[20px]">search</span>
         </button>
         <button
           onClick={disableNewChat ? undefined : onNewChat}
@@ -228,7 +228,7 @@ export default function Sidebar({
           }`}
           title="New chat"
         >
-          ➕
+          <span className="material-symbols-outlined text-[20px]">add</span>
         </button>
       </div>
     )
@@ -265,7 +265,7 @@ export default function Sidebar({
                   }`}
                   title="Close search"
                 >
-                  ✕
+                  <span className="material-symbols-outlined text-[18px]">close</span>
                 </button>
               </div>
 
@@ -377,7 +377,7 @@ export default function Sidebar({
               }`}
               title="Collapse sidebar"
             >
-              ◀
+              <span className="material-symbols-outlined text-[20px]">chevron_left</span>
             </button>
           </div>
         </div>
@@ -393,7 +393,7 @@ export default function Sidebar({
                   : 'bg-primary text-white hover:bg-secondary'
             }`}
           >
-            <span className="text-base">＋</span>
+            <span className="material-symbols-outlined text-[18px]">add</span>
             <span>New Chat</span>
           </button>
           <button
@@ -409,7 +409,7 @@ export default function Sidebar({
             }`}
             title="Search chats"
           >
-            🔍
+            <span className="material-symbols-outlined text-[20px]">search</span>
           </button>
         </div>
       </div>
@@ -474,7 +474,7 @@ export default function Sidebar({
                     title="More options"
                     aria-label="More options"
                   >
-                    ...
+                    <span className="material-symbols-outlined text-[18px]">more_horiz</span>
                   </button>
                 </div>
               </div>

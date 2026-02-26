@@ -124,3 +124,13 @@ body[data-theme='dark'] .scrollbar-thin::-webkit-scrollbar-thumb:hover {
   padding: 0.15rem 0.35rem;
   font-size: 0.85em;
 }
+
+/* Google Material Symbols icon defaults */
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 300, 'OPSZ' 24;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+}
