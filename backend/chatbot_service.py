@@ -748,8 +748,8 @@ class ChatbotService:
                 if not answer:
                     answer = fallback_sentence
 
-            # Add policy disclaimer if this is a policy question
-            if question_category == "academic_policy" and answer != fallback_sentence:
+            # Add disclaimer under every response
+            if answer != fallback_sentence:
                 answer = answer + config.POLICY_DISCLAIMER
 
             # Generate follow-up suggestions tailored to the user's context
@@ -951,7 +951,7 @@ class ChatbotService:
                 if not answer:
                     answer = fallback_sentence
 
-            if question_category == "academic_policy" and answer != fallback_sentence:
+            if answer != fallback_sentence:
                 answer = answer + config.POLICY_DISCLAIMER
 
             # Generate follow-ups off the critical path (via thread)
@@ -1123,8 +1123,8 @@ class ChatbotService:
             "For official guidance and questions about how these policies apply to your specific situation, "
             "please consult with your academic advisor or the Office of the Registrar.")
 
-        # Add policy disclaimer if needed (sent as final token)
-        if question_category == "academic_policy" and answer != fallback_sentence:
+        # Add disclaimer under every response (sent as final token)
+        if answer != fallback_sentence:
             yield f"event: token\ndata: {_json.dumps({'token': config.POLICY_DISCLAIMER})}\n\n"
             answer = answer + config.POLICY_DISCLAIMER
 
