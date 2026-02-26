@@ -2,257 +2,137 @@
 
 FastAPI backend for the Bucknell University course catalog chatbot.
 
-## Features
+## What this service does
 
-- **RAG (Retrieval-Augmented Generation)**: Uses ChromaDB to retrieve relevant course information and OpenAI to generate answers
-- **Session Management**: Tracks conversation history using SQLite
-- **Feedback System**: Allows users to rate assistant responses with thumbs up/down
-- **Message History**: Retrieves full conversation history for session restoration
+- Provides the HTTP API used by the frontend chat UI
+- Implements RAG (Retrieval-Augmented Generation):
+  - Ingests PDFs / Google Docs content
+  - Creates embeddings using OpenAI
+  - Stores embeddings in ChromaDB
+  - Retrieves relevant chunks during chat
+- Persists sessions, messages, and feedback in SQLite (via SQLAlchemy)
+
+## Tech stack
+
+- FastAPI + Uvicorn
+- SQLAlchemy + SQLite
+- LangChain + ChromaDB
+- OpenAI (chat + embeddings)
+- Optional OCR support (Tesseract via `pytesseract`) for schedule image uploads
+
+## Prerequisites
+
+- Python 3.8+
+- OpenAI API key
+- (Optional) Tesseract OCR binary if using schedule image uploads
+
+### Install Tesseract (optional)
+
+- macOS: `brew install tesseract`
+- Ubuntu/Debian: `sudo apt-get update && sudo apt-get install -y tesseract-ocr`
+- Windows: UB Mannheim installer + add to PATH
 
 ## Setup
 
-### 1. Install Dependencies
+### 1) Create virtual environment
+
+```bash
+python -m venv .venv
+```
+
+Activate:
+
+- macOS/Linux: `source .venv/bin/activate`
+- Windows: `.venv\\Scripts\\activate`
+
+### 2) Install dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-#### Schedule OCR requirement
+### 3) Configure environment variables
 
-Screenshot uploads for the schedule assistant depend on the Tesseract OCR binary. Install it on your system before uploading PNG/JPG files:
+Copy:
 
-- **macOS:** `brew install tesseract`
-- **Ubuntu/Debian:** `sudo apt-get update && sudo apt-get install -y tesseract-ocr`
-- **Windows:** Use the [UB Mannheim installer](https://github.com/UB-Mannheim/tesseract/wiki) and add the install directory to your `PATH`.
-
-If Tesseract is missing you will only be able to ingest plain text/CSV schedules.
-
-### 2. Configure Environment Variables
-
-Create or update `.env` file with your OpenAI API key:
-
-```
-OPENAI_API_KEY=your_api_key_here
-OPENAI_MODEL=gpt-4o-mini
-EMBEDDING_MODEL=text-embedding-3-large
-DATABASE_URL=sqlite:///./chatbot.db
-CHROMA_PATH=chroma_db
-DATA_PATH=data
-ALLOWED_ORIGINS=http://localhost:3000,http://localhost:3001
-GOOGLE_DOCS_CSV=data/google_docs.csv
-GOOGLE_DOCS_CACHE_DIR=data/google_docs_cache
-GOOGLE_DOCS_REFRESH=false
-GOOGLE_DOCS_ONLY=false
+```bash
+cp .env.example .env
 ```
 
-### 3. Ingest Course Catalog Data
+Minimum required:
 
-Place your course catalog PDFs in the `data/` folder, or list Google Docs viewer links in `data/google_docs.csv`, then run:
+- `OPENAI_API_KEY=...`
+
+Common settings (see `.env.example` for full list):
+
+- `OPENAI_MODEL` (default: `gpt-4o-mini`)
+- `EMBEDDING_MODEL` (default: `text-embedding-3-large`)
+- `DATABASE_URL` (default: sqlite)
+- `CHROMA_PATH` / `CHROMA_COLLECTION_NAME`
+- `ALLOWED_ORIGINS` (CORS; include `http://localhost:3000` for local frontend)
+
+## Ingest data (build the knowledge base)
+
+### PDFs
+
+1. Put PDFs in `backend/data/`
+2. Run:
 
 ```bash
 python ingest_database.py
 ```
 
-This will:
-- Load PDFs from the data directory
-- Fetch Google Docs, convert to Markdown, and cache the `.md` files
-- Split documents into chunks
-- Generate embeddings using OpenAI
-- Store embeddings in ChromaDB
+### Google Docs (optional / supported)
 
-If you want to ingest Google Docs only (no PDFs), set:
-```
-GOOGLE_DOCS_ONLY=true
-```
+1. Populate `backend/data/google_docs.csv` with:
 
-`data/google_docs.csv` format:
-```
+```csv
 filename,doc_type,url
 2025-2026 course catalog,catalog,https://docs.google.com/document/d/<id>/edit?usp=sharing
-ACADEMIC STANDING,policy,https://docs.google.com/document/d/<id>/edit?usp=sharing
 ```
-Docs must be shared with at least Viewer access.
 
-### 4. Run the API Server
+2. Ensure docs are shared with at least Viewer access
+3. Run:
+
+```bash
+python ingest_database.py
+```
+
+Notes:
+
+- The ingester will cache converted docs into a local cache directory (see env vars)
+- `GOOGLE_DOCS_ONLY=true` ingests only Google Docs
+
+## Run the server
+
+### Option A: run via Python
 
 ```bash
 python main.py
 ```
 
-Or with uvicorn directly:
+### Option B: run via uvicorn
 
 ```bash
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-The API will be available at `http://localhost:8000`
+API docs:
 
-## API Endpoints
+- Swagger UI: http://localhost:8000/docs
 
-### Public Endpoints
-
-#### `POST /chat`
-Ask a question and get an answer with citations.
-
-**Request:**
-```json
-{
-  "session_id": "550e8400-e29b-41d4-a716-446655440000",
-  "message": "What courses are available for Computer Science majors?"
-}
-```
-
-**Response:**
-```json
-{
-  "message_id": 123,
-  "answer": "Based on the course catalog...",
-  "citations": [
-    {
-      "content": "CSCI 101: Introduction to Computer Science...",
-      "source": "2025-2026 course catalog.pdf",
-      "page": 45
-    }
-  ],
-  "session_id": "550e8400-e29b-41d4-a716-446655440000"
-}
-```
-
-#### `POST /feedback`
-Submit thumbs up/down feedback for an assistant message.
-
-**Request:**
-```json
-{
-  "session_id": "550e8400-e29b-41d4-a716-446655440000",
-  "message_id": 123,
-  "rating": 1,
-  "note": "Very helpful!"
-}
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "feedback_id": 456
-}
-```
-
-#### `GET /messages?session_id={session_id}`
-Retrieve conversation history for a session.
-
-**Response:**
-```json
-{
-  "session_id": "550e8400-e29b-41d4-a716-446655440000",
-  "messages": [
-    {
-      "id": 122,
-      "role": "user",
-      "content": "What courses are available?",
-      "citations": null,
-      "created_at": "2025-11-12T10:30:00"
-    },
-    {
-      "id": 123,
-      "role": "assistant",
-      "content": "Based on the catalog...",
-      "citations": [...],
-      "created_at": "2025-11-12T10:30:05"
-    }
-  ]
-}
-```
-
-### Admin Endpoints
-
-#### `POST /admin/ingest`
-Trigger re-ingestion of PDFs from the data folder. (Note: Add authentication in production)
-
-## Architecture
-
-### Data Flow
-
-**Chat Flow:**
-1. User sends message to `/chat` with session_id
-2. Backend creates session if needed
-3. Logs user message to SQLite
-4. Retrieves top-K relevant chunks from ChromaDB
-5. Calls OpenAI to generate answer with context
-6. Logs assistant response with citations
-7. Returns answer and message_id
-
-**Feedback Flow:**
-1. User clicks thumbs up/down on message
-2. Frontend calls `/feedback` with message_id and rating
-3. Backend stores feedback in SQLite
-4. Used for analytics (doesn't modify knowledge base)
-
-**Session Restoration:**
-1. User returns to app
-2. Frontend retrieves session_id from localStorage
-3. Calls `/messages?session_id=...`
-4. Displays full conversation history
-
-### Database Schema
-
-**sessions table:**
-- session_id (PK)
-- created_at
-- updated_at
-
-**messages table:**
-- id (PK, auto-increment)
-- session_id
-- role (user/assistant)
-- content
-- citations (JSON)
-- created_at
-
-**feedback table:**
-- id (PK, auto-increment)
-- session_id
-- message_id
-- rating (1 or -1)
-- note (optional)
-- created_at
-
-## Files
-
-- `main.py`: FastAPI application with API endpoints
-- `chatbot_service.py`: RAG logic (ChromaDB + OpenAI)
-- `database.py`: SQLAlchemy models and session management
-- `models.py`: Pydantic request/response models
-- `config.py`: Configuration and environment variables
-- `ingest_database.py`: Script to ingest PDFs into ChromaDB
-- `chatbot.py`: Original Gradio demo (kept for reference)
-
-## Testing the API
-
-You can test the API using the interactive docs at `http://localhost:8000/docs` (Swagger UI) or `http://localhost:8000/redoc` (ReDoc).
-
-Example using curl:
+## Testing / diagnostics
 
 ```bash
-# Chat
-curl -X POST "http://localhost:8000/chat" \
-  -H "Content-Type: application/json" \
-  -d '{"session_id": "test-123", "message": "What is CSCI 101?"}'
-
-# Get messages
-curl "http://localhost:8000/messages?session_id=test-123"
-
-# Submit feedback
-curl -X POST "http://localhost:8000/feedback" \
-  -H "Content-Type: application/json" \
-  -d '{"session_id": "test-123", "message_id": 1, "rating": 1}'
+python test_setup.py
 ```
 
-## Notes
+## Troubleshooting
 
-- Session IDs should be UUIDs generated by the frontend
-- Citations are stored as JSON strings in SQLite
-- The chatbot uses conversation history (last 6 messages) for context
-- ChromaDB updates don't require server restart
-- CORS is configured for localhost:3000 and localhost:3001 by default
+- **CORS errors**
+  - Ensure `ALLOWED_ORIGINS` includes `http://localhost:3000`
+- **Chroma / retrieval issues**
+  - Re-run ingestion
+  - Confirm `CHROMA_PATH` and `CHROMA_COLLECTION_NAME` match what ingestion used
+- **OCR not working**
+  - Confirm system `tesseract` is installed and in PATH

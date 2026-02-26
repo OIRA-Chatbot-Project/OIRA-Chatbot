@@ -2,133 +2,102 @@
 
 AI-powered course catalog assistant for Bucknell University.
 
-## 🚀 Quick Start
+This repository contains:
+- **Backend**: FastAPI + RAG (ChromaDB + LangChain + OpenAI) in [`backend/`](./backend)
+- **Frontend**: Next.js chat UI (with Clerk auth) in [`frontend/`](./frontend)
 
-### One-Command Startup
+## Quick start (recommended)
 
+### 1) Configure environment variables
+
+Backend:
+- Copy `backend/.env.example` → `backend/.env`
+- Fill in at least `OPENAI_API_KEY`
+  - Optional: Clerk keys if auth is enabled/required in your deployment
+
+Frontend:
+- Copy `frontend/.env.example` → `frontend/.env.local`
+- Set `NEXT_PUBLIC_API_URL` (default `http://localhost:8000`)
+- Add Clerk publishable/secret keys if using auth
+
+### 2) Run both services
 
 **Mac/Linux or Git Bash:**
 ```bash
 bash start.sh
 ```
 
-
-This will start both the backend API server and frontend UI automatically!
-
-- **Frontend:** http://localhost:3000
-- **Backend API:** http://localhost:8000
-- **API Docs:** http://localhost:8000/docs
-
-## 📋 Prerequisites
-
-- **Python 3.8+** (for backend)
-- **Node.js 18+** (for frontend)
-- **OpenAI API Key** (configured in `backend/.env`)
-
-## 📁 Project Structure (general)
-
-```
-OIRA-Chatbot/
-├── backend/              # FastAPI backend
-│   ├── main.py          # API endpoints
-│   ├── chatbot_service.py
-│   ├── database.py
-│   ├── ingest_database.py
-│   └── requirements.txt
-├── frontend/            # Next.js frontend
-│   ├── app/
-│   ├── package.json
-│   |── README.md
-|   |__ middleware.ts
-├── start.sh             # Startup script (Unix)
+**Windows:**
+```bash
+./start.ps1
 ```
 
-## 🛠️ Manual Setup
+Services:
+- Frontend: http://localhost:3000
+- Backend API: http://localhost:8000
+- Backend API docs (Swagger): http://localhost:8000/docs
 
-If you prefer to run backend and frontend separately:
+## Manual setup (run services separately)
 
 ### Backend
+See [`backend/README.md`](./backend/README.md).
 
-1. Navigate to backend folder:
-   ```bash
-   cd backend
-   ```
-
-2. Create `.env` file and follow `.env.example` to fill it out
-
-
-3. Create virtual environment:
-   ```bash
-   python -m venv .venv
-   ```
-
-4. Activate virtual environment:
-   - **Windows:** `.venv\Scripts\activate`
-   - **Mac/Linux:** `source .venv/bin/activate`
-
-5. Install dependencies and ingest data:
-   ```bash
-   pip install -r requirements.txt
-   python ingest_database.py
-   ```
-
-6. Start backend server:
-   ```bash
-   python main.py
-   ```
+Typical flow:
+```bash
+cd backend
+python -m venv .venv
+source .venv/bin/activate   # or .venv\\Scripts\\activate on Windows
+pip install -r requirements.txt
+python ingest_database.py
+python main.py
+```
 
 ### Frontend
+See [`frontend/README.md`](./frontend/README.md).
 
-1. Navigate to frontend folder:
-   ```bash
-   cd frontend
-   ```
-2. Create a `.env` file and follow `.env.example` to fill it out
+Typical flow:
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
-3. Install dependencies:
-   ```bash
-   npm install
-   ```
+## Key concepts
 
-4. Start development server:
-   ```bash
-   npm run dev
-   ```
+### RAG ingestion lifecycle
+1. Put course catalog PDFs in `backend/data/` and/or configure Google Docs links in `backend/data/google_docs.csv`
+2. Run `python backend/ingest_database.py`
+3. Backend stores embeddings in ChromaDB and metadata in SQLite
+4. Chat endpoint retrieves relevant chunks and calls OpenAI to generate answers + citations
 
+### Sessions and feedback
+- Sessions are tracked (backend SQLite)
+- UI stores session identifiers locally and can restore previous chats
+- Users can submit thumbs up/down feedback for assistant messages
 
-   Move to chunking improvements (to keep list/table blocks intact).
+## Testing / utilities
 
-
-
-## 🎯 Features
-
-- 💬 RAG-powered chatbot with course catalog knowledge
-- 📚 Citation tracking with page references
-- 👍👎 Feedback system for response quality
-- 💾 Session management and chat history
-- 🔍 ChromaDB vector search with MMR retrieval
-- 🤖 OpenAI GPT-4o-mini integration
-
-
-## 🧪 Testing
-
-**Test Backend:**
+Backend quick checks:
 ```bash
 cd backend
 python test_setup.py
 python test_api.py
 ```
 
-**View Database:**
+Inspect DB:
 ```bash
 cd backend
 python view_database.py
 ```
 
-## 📝 License
+## Troubleshooting
 
+- **Frontend cannot reach backend**
+  - Ensure backend is running and `NEXT_PUBLIC_API_URL` is correct
+  - Check backend CORS (`ALLOWED_ORIGINS` in `backend/.env`)
+- **Ingestion fails**
+  - Verify `OPENAI_API_KEY` and model names
+  - Ensure PDFs exist in `backend/data/` or Google Docs CSV is valid
+
+## License
 Bucknell University - OIRA Chatbot Project
-
-## 🤝 Contributors
-
-OIRA Chatbot Project Team
