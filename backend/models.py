@@ -35,6 +35,25 @@ class FeedbackRequest(BaseModel):
     note: Optional[str] = Field(None, description="Optional feedback note")
 
 
+class EditMessageRequest(BaseModel):
+    """Request model for editing a user message"""
+    session_id: str = Field(..., description="Session identifier")
+    message_id: int = Field(..., description="ID of the user message to edit")
+    content: str = Field(..., description="Updated message content")
+
+
+class EditMessageResponse(BaseModel):
+    """Response model for editing a message"""
+    success: bool = Field(..., description="Whether the edit succeeded")
+    deleted_message_ids: List[int] = Field(default_factory=list, description="Messages removed after edit")
+
+
+class RegenerateRequest(BaseModel):
+    """Request model for regenerating an assistant response"""
+    session_id: str = Field(..., description="Session identifier")
+    user_message_id: int = Field(..., description="ID of the user message to regenerate from")
+
+
 # Response Models
 class Citation(BaseModel):
     """Citation information for a source"""

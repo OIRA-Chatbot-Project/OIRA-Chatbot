@@ -9,23 +9,34 @@ interface MessageListProps {
   theme: Theme
   animationEnabled?: boolean
   animateMessageId?: number
+  isLoading?: boolean
+  onEditQuestion?: (messageId: number, content: string) => void
   onFollowupClick?: (text: string) => void
 }
 
-export default function MessageList({ messages, onFeedback, theme, animationEnabled, animateMessageId, onFollowupClick }: MessageListProps) {
+export default function MessageList({ messages, onFeedback, theme, animationEnabled, animateMessageId, isLoading, onEditQuestion, onFollowupClick }: MessageListProps) {
+  const lastUserIndex = [...messages].reverse().findIndex(msg => msg.role === 'user')
+  const resolvedLastUserIndex = lastUserIndex === -1 ? -1 : messages.length - 1 - lastUserIndex
   return (
     <div className="space-y-3">
-      {messages.map((message) => (
-        <MessageItem
-          key={message.id}
-          message={message}
-          onFeedback={onFeedback}
-          theme={theme}
-          animationEnabled={!!animationEnabled}
-          animate={animateMessageId === message.id}
-          onFollowupClick={onFollowupClick}
-        />
-      ))}
+      {messages.map((message, index) => {
+        const isLastUser = index === resolvedLastUserIndex
+
+        return (
+          <MessageItem
+            key={message.id}
+            message={message}
+            onFeedback={onFeedback}
+            theme={theme}
+            animationEnabled={!!animationEnabled}
+            animate={animateMessageId === message.id}
+            isLoading={!!isLoading}
+            isLastUser={isLastUser}
+            onEditQuestion={onEditQuestion}
+            onFollowupClick={onFollowupClick}
+          />
+        )
+      })}
     </div>
   )
 }

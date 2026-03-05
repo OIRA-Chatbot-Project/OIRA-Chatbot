@@ -11,6 +11,9 @@ interface MessageItemProps {
   theme: Theme
   animationEnabled?: boolean
   animate?: boolean
+  isLoading?: boolean
+  isLastUser?: boolean
+  onEditQuestion?: (messageId: number, content: string) => void
   onFollowupClick?: (text: string) => void
 }
 
@@ -22,7 +25,17 @@ const THINKING_MESSAGES = [
   'Almost there...',
 ]
 
-export default function MessageItem({ message, onFeedback, theme, animationEnabled = false, animate = false, onFollowupClick }: MessageItemProps) {
+export default function MessageItem({
+  message,
+  onFeedback,
+  theme,
+  animationEnabled = false,
+  animate = false,
+  isLoading = false,
+  isLastUser = false,
+  onEditQuestion,
+  onFollowupClick
+}: MessageItemProps) {
   const [displayedCount, setDisplayedCount] = useState(0)
   const [animationComplete, setAnimationComplete] = useState(false)
   const [thinkingIndex, setThinkingIndex] = useState(0)
@@ -102,8 +115,15 @@ export default function MessageItem({ message, onFeedback, theme, animationEnabl
   const [flagComment, setFlagComment] = useState('')
   const [citationsOpen, setCitationsOpen] = useState(false)
   const markdownContentRef = useRef<HTMLDivElement>(null)
+  const [isEditing, setIsEditing] = useState(false)
+  const [draft, setDraft] = useState(message.content || '')
 
   const isUser = message.role === 'user'
+
+  useEffect(() => {
+    setDraft(message.content || '')
+    setIsEditing(false)
+  }, [message.id, message.content])
 
   const handleFeedback = (rating: number) => {
     if (rating === -1) {
@@ -257,13 +277,58 @@ export default function MessageItem({ message, onFeedback, theme, animationEnabl
           ) : (
             /* Renders the list syntax (sections, bullets, numbered lists) to become HTML with nested hierarchy. */
             <div ref={markdownContentRef} className={`markdown-content relative ${isUser ? 'text-white' : theme === 'dark' ? 'text-gray-100' : 'text-gray-900'}`}>
-              <div className="leading-normal">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                  {displayedContent}
-                </ReactMarkdown>
-              </div>
-              {shouldAnimate && !animationComplete && (
-                <span className="inline-block animate-pulse ml-1">▌</span>
+              {isUser && isEditing ? (
+                <div>
+                  <textarea
+                    value={draft}
+                    onChange={(e) => setDraft(e.target.value)}
+                    className={`w-full text-sm rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary ${
+                      theme === 'dark'
+                        ? 'bg-slate-900 text-gray-100 placeholder:text-gray-500 border border-slate-700'
+                        : 'bg-white text-gray-900 placeholder:text-gray-500 border border-gray-300'
+                    }`}
+                    rows={3}
+                  />
+                  <div className="mt-2 flex gap-2">
+                    <button
+                      onClick={() => {
+                        if (!onEditQuestion || !draft.trim()) return
+                        setIsEditing(false)
+                        onEditQuestion(message.id, draft.trim())
+                      }}
+                      disabled={isLoading || !draft.trim()}
+                      className={`text-xs px-3 py-1 rounded ${
+                        isLoading || !draft.trim()
+                          ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                          : 'bg-secondary text-white hover:bg-opacity-90'
+                      }`}
+                    >
+                      Save & Regenerate
+                    </button>
+                    <button
+                      onClick={() => {
+                        setDraft(message.content || '')
+                        setIsEditing(false)
+                      }}
+                      className={`text-xs px-3 py-1 rounded ${
+                        theme === 'dark' ? 'text-gray-300 hover:bg-slate-800' : 'text-gray-600 hover:bg-gray-100'
+                      }`}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="leading-normal">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {displayedContent}
+                    </ReactMarkdown>
+                  </div>
+                  {shouldAnimate && !animationComplete && (
+                    <span className="inline-block animate-pulse ml-1">▌</span>
+                  )}
+                </>
               )}
             </div>
           )}
@@ -538,6 +603,24 @@ export default function MessageItem({ message, onFeedback, theme, animationEnabl
             ? <span className="flex items-center gap-1"><span className="material-symbols-outlined text-[14px]">thumb_up</span> Marked as helpful</span>
             : <span className="flex items-center gap-1"><span className="material-symbols-outlined text-[14px]">thumb_down</span> Feedback submitted</span>
           }
+          </div>
+        )}
+
+        {isUser && isLastUser && !isEditing && onEditQuestion && (
+          <div className="mt-2 flex items-center gap-2 text-xs">
+            <button
+              onClick={() => setIsEditing(true)}
+              disabled={isLoading}
+              className={`px-2 py-1 rounded-full border transition-colors ${
+                isLoading
+                  ? 'border-gray-300 text-gray-400 cursor-not-allowed'
+                  : theme === 'dark'
+                    ? 'border-slate-700 text-gray-200 hover:bg-slate-800'
+                    : 'border-gray-200 text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              Edit
+            </button>
           </div>
         )}
 

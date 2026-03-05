@@ -138,17 +138,14 @@ export default function ChatInterface({
 
   const ENABLE_STREAMING = true
 
-  const sendMessageStreaming = async (content: string, token: string, isFirstMessage: boolean, placeholderId: number) => {
-    const response = await fetch(`${API_URL}/chat/stream`, {
+  const streamAssistantMessage = async (url: string, body: Record<string, unknown>, placeholderId: number, token: string) => {
+    const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`,
       },
-      body: JSON.stringify({
-        session_id: sessionId,
-        message: content,
-      }),
+      body: JSON.stringify(body),
     })
 
     if (!response.ok) {
@@ -241,11 +238,6 @@ export default function ChatInterface({
 
     // Disable animation for streamed messages (tokens already arrive progressively)
     setAnimateMessageId(undefined)
-
-    if (isFirstMessage) {
-      notifySessionTitle(content)
-      onSessionHasMessages?.(sessionId)
-    }
   }
 
   const sendMessageNonStreaming = async (content: string, token: string, isFirstMessage: boolean) => {
@@ -338,7 +330,16 @@ export default function ChatInterface({
         setAnimateMessageId(undefined)
         setIsLoading(false) // Hide bouncing dots, the placeholder message is visible
 
-        await sendMessageStreaming(content, token, isFirstMessage, placeholderId)
+        await streamAssistantMessage(
+          `${API_URL}/chat/stream`,
+          { session_id: sessionId, message: content },
+          placeholderId,
+          token
+        )
+        if (isFirstMessage) {
+          notifySessionTitle(content)
+          onSessionHasMessages?.(sessionId)
+        }
       } else {
         await sendMessageNonStreaming(content, token, isFirstMessage)
       }
@@ -384,6 +385,126 @@ export default function ChatInterface({
       )
     } catch (err) {
       console.error('Error submitting feedback:', err)
+    }
+  }
+
+  const removeMessagesAfter = (messageId: number) => {
+    setMessages(prev => prev.filter(msg => msg.id <= messageId))
+    setSeenMessageIds(prev => {
+      const next = new Set(prev)
+      for (const id of Array.from(next)) {
+        if (id > messageId) next.delete(id)
+      }
+      return next
+    })
+  }
+
+  const regenerateAnswer = async (userMessageId: number, options?: { skipLoading?: boolean }) => {
+    const skipLoading = options?.skipLoading === true
+    if (!skipLoading) {
+      setIsLoading(true)
+    }
+    setError(null)
+    try {
+      const token = await getToken()
+      if (!token) {
+        setError('Authentication required')
+        return
+      }
+
+      removeMessagesAfter(userMessageId)
+
+      // Create a placeholder assistant message for progressive rendering
+      const placeholderId = Date.now() + 1
+      const placeholderMessage: Message = {
+        id: placeholderId,
+        role: 'assistant',
+        content: '',
+        citations: [],
+        follow_ups: [],
+        created_at: new Date().toISOString(),
+      }
+      setMessages(prev => [...prev, placeholderMessage])
+      setSeenMessageIds(prev => {
+        const next = new Set(prev)
+        next.add(placeholderId)
+        return next
+      })
+      setAnimateMessageId(undefined)
+      if (!skipLoading) {
+        setIsLoading(false)
+      }
+
+      await streamAssistantMessage(
+        `${API_URL}/chat/regenerate/stream`,
+        { session_id: sessionId, user_message_id: userMessageId },
+        placeholderId,
+        token
+      )
+    } catch (err) {
+      console.error('Error regenerating response:', err)
+      setError('Failed to regenerate response. Please try again.')
+    } finally {
+      if (!skipLoading) {
+        setIsLoading(false)
+      }
+    }
+  }
+
+  const editQuestionAndRegenerate = async (messageId: number, content: string) => {
+    if (!content.trim()) return
+    setIsLoading(true)
+    setError(null)
+    try {
+      const token = await getToken()
+      if (!token) {
+        setError('Authentication required')
+        return
+      }
+
+      const response = await fetch(`${API_URL}/messages/edit`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          session_id: sessionId,
+          message_id: messageId,
+          content,
+        }),
+      })
+
+      if (!response.ok) {
+        const detail = await response.text()
+        console.error('Edit message failed', {
+          url: `${API_URL}/messages/edit`,
+          status: response.status,
+          detail
+        })
+        throw new Error(`Failed to edit message (${response.status})`)
+      }
+
+      const data = await response.json()
+      const deletedIds: number[] = data.deleted_message_ids || []
+
+      setMessages(prev =>
+        prev
+          .map(msg => (msg.id === messageId ? { ...msg, content } : msg))
+          .filter(msg => !deletedIds.includes(msg.id))
+      )
+      setSeenMessageIds(prev => {
+        const next = new Set(prev)
+        deletedIds.forEach(id => next.delete(id))
+        return next
+      })
+
+      await regenerateAnswer(messageId, { skipLoading: true })
+    } catch (err) {
+      console.error('Error editing message:', err)
+      setError('Failed to edit message. Please try again.')
+    } finally {
+      setIsLoading(false)
     }
   }
 
@@ -668,6 +789,8 @@ export default function ChatInterface({
           theme={theme}
           animationEnabled={animationEnabled}
           animateMessageId={animateMessageId}
+          isLoading={isLoading}
+          onEditQuestion={editQuestionAndRegenerate}
           onFollowupClick={(text: string) => sendMessage(text)}
         />
         
