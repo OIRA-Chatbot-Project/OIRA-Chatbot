@@ -67,6 +67,7 @@ class Citation(BaseModel):
 class ChatResponse(BaseModel):
     """Response model for /chat endpoint"""
     message_id: int = Field(..., description="ID of the assistant's message")
+    user_message_id: Optional[int] = Field(None, description="ID of the user's message")
     answer: str = Field(..., description="The assistant's answer")
     citations: List[Citation] = Field(default_factory=list, description="List of citations")
     session_id: str = Field(..., description="Session identifier")

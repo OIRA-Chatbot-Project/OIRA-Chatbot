@@ -107,6 +107,7 @@ async def chat(
 
         return ChatResponse(
             message_id=assistant_message.id,
+            user_message_id=user_message.id,
             answer=cleaned_answer,
             citations=citation_objects,
             session_id=request.session_id,
@@ -286,6 +287,7 @@ async def chat_stream(
     ]
 
     chatbot = get_chatbot_service()
+    user_message_id = user_message.id
 
     async def event_generator():
         final_answer = ""
@@ -293,6 +295,8 @@ async def chat_stream(
         final_category = "course_catalog"
 
         try:
+            user_payload = json.dumps({"message_id": user_message_id})
+            yield f"event: user\ndata: {user_payload}\n\n"
             async for event in chatbot.get_answer_streaming(request.message, conversation_history):
                 # Forward all events from the service
                 yield event

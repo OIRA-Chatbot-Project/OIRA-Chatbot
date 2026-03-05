@@ -138,7 +138,13 @@ export default function ChatInterface({
 
   const ENABLE_STREAMING = true
 
-  const streamAssistantMessage = async (url: string, body: Record<string, unknown>, placeholderId: number, token: string) => {
+  const streamAssistantMessage = async (
+    url: string,
+    body: Record<string, unknown>,
+    placeholderId: number,
+    token: string,
+    userPlaceholderId?: number
+  ) => {
     const response = await fetch(url, {
       method: 'POST',
       headers: {
@@ -184,6 +190,22 @@ export default function ChatInterface({
                     ? { ...msg, citations: data.citations || [] }
                     : msg
                 ))
+                break
+
+              case 'user':
+                if (userPlaceholderId && data.message_id) {
+                  setMessages(prev => prev.map(msg =>
+                    msg.id === userPlaceholderId
+                      ? { ...msg, id: data.message_id }
+                      : msg
+                  ))
+                  setSeenMessageIds(prev => {
+                    const next = new Set(prev)
+                    next.delete(userPlaceholderId)
+                    next.add(data.message_id)
+                    return next
+                  })
+                }
                 break
 
               case 'token':
@@ -240,7 +262,7 @@ export default function ChatInterface({
     setAnimateMessageId(undefined)
   }
 
-  const sendMessageNonStreaming = async (content: string, token: string, isFirstMessage: boolean) => {
+  const sendMessageNonStreaming = async (content: string, token: string, isFirstMessage: boolean, userPlaceholderId: number) => {
     const response = await fetch(`${API_URL}/chat`, {
       method: 'POST',
       headers: {
@@ -258,6 +280,20 @@ export default function ChatInterface({
     }
 
     const data = await response.json()
+
+    if (data.user_message_id) {
+      setMessages(prev => prev.map(msg =>
+        msg.id === userPlaceholderId
+          ? { ...msg, id: data.user_message_id }
+          : msg
+      ))
+      setSeenMessageIds(prev => {
+        const next = new Set(prev)
+        next.delete(userPlaceholderId)
+        next.add(data.user_message_id)
+        return next
+      })
+    }
 
     const assistantMessage: Message = {
       id: data.message_id,
@@ -284,8 +320,9 @@ export default function ChatInterface({
 
   const sendMessage = async (content: string) => {
     // Add user message to UI
+    const userPlaceholderId = Date.now()
     const userMessage: Message = {
-      id: Date.now(),
+      id: userPlaceholderId,
       role: 'user',
       content,
       created_at: new Date().toISOString(),
@@ -334,14 +371,15 @@ export default function ChatInterface({
           `${API_URL}/chat/stream`,
           { session_id: sessionId, message: content },
           placeholderId,
-          token
+          token,
+          userPlaceholderId
         )
         if (isFirstMessage) {
           notifySessionTitle(content)
           onSessionHasMessages?.(sessionId)
         }
       } else {
-        await sendMessageNonStreaming(content, token, isFirstMessage)
+        await sendMessageNonStreaming(content, token, isFirstMessage, userPlaceholderId)
       }
     } catch (err) {
       setError('Failed to get response. Please try again.')
