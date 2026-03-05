@@ -1,7 +1,7 @@
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_chroma import Chroma
 from langchain_core.messages import SystemMessage, HumanMessage
-from typing import List, Dict, Tuple, Optional
+from typing import List, Dict, Tuple, Optional, Any
 import asyncio
 import os
 import re
@@ -133,6 +133,22 @@ class ChatbotService:
         # For now, all PDFs are served from same endpoint with different filenames
         # Frontend should handle routing to correct PDF
         return f"http://localhost:3000/{url_safe_filename}#page={page}"
+
+    def _dedupe_citations(self, citations: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Remove duplicate citations while preserving order."""
+        seen = set()
+        deduped: List[Dict[str, Any]] = []
+        for c in citations:
+            key = (
+                c.get("source"),
+                c.get("page"),
+                c.get("content"),
+            )
+            if key in seen:
+                continue
+            seen.add(key)
+            deduped.append(c)
+        return deduped
 
     def _prepare_knowledge(self, docs) -> str:
         """
@@ -711,6 +727,7 @@ class ChatbotService:
                 "filename": source_filename
             }
             citations.append(citation)
+        citations = self._dedupe_citations(citations)
 
         # Format conversation history for context
         history_context = ""
@@ -921,6 +938,7 @@ class ChatbotService:
                 "doc_type": doc_type,
             }
             citations.append(citation)
+        citations = self._dedupe_citations(citations)
 
         # Format conversation history
         history_context = ""
@@ -1082,6 +1100,7 @@ class ChatbotService:
                 "url": self._get_document_url(source_filename, page, meta.get("source_url")),
                 "doc_type": doc_type,
             })
+        citations = self._dedupe_citations(citations)
 
         # STEP 3: Send metadata event (citations, category) before streaming
         yield f"event: metadata\ndata: {_json.dumps({'category': question_category, 'citations': citations})}\n\n"
