@@ -12,6 +12,7 @@ interface MessageItemProps {
   animationEnabled?: boolean
   animate?: boolean
   isLoading?: boolean
+  isRegenerating?: boolean
   isLastUser?: boolean
   onEditQuestion?: (messageId: number, content: string) => void
   onFollowupClick?: (text: string) => void
@@ -32,6 +33,7 @@ export default function MessageItem({
   animationEnabled = false,
   animate = false,
   isLoading = false,
+  isRegenerating = false,
   isLastUser = false,
   onEditQuestion,
   onFollowupClick
@@ -119,6 +121,7 @@ export default function MessageItem({
   const [draft, setDraft] = useState(message.content || '')
 
   const isUser = message.role === 'user'
+  const isBusy = isLoading || isRegenerating
 
   useEffect(() => {
     setDraft(message.content || '')
@@ -296,9 +299,9 @@ export default function MessageItem({
                         setIsEditing(false)
                         onEditQuestion(message.id, draft.trim())
                       }}
-                      disabled={isLoading || !draft.trim()}
+                      disabled={isBusy || !draft.trim()}
                       className={`text-xs px-3 py-1 rounded ${
-                        isLoading || !draft.trim()
+                        isBusy || !draft.trim()
                           ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
                           : 'bg-secondary text-white hover:bg-opacity-90'
                       }`}
@@ -610,9 +613,9 @@ export default function MessageItem({
           <div className="mt-2 flex items-center gap-2 text-xs">
             <button
               onClick={() => setIsEditing(true)}
-              disabled={isLoading}
+              disabled={isBusy}
               className={`px-2 py-1 rounded-full border transition-colors ${
-                isLoading
+                isBusy
                   ? 'border-gray-300 text-gray-400 cursor-not-allowed'
                   : theme === 'dark'
                     ? 'border-slate-700 text-gray-200 hover:bg-slate-800'

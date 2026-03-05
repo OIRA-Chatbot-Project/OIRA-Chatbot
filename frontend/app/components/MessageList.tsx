@@ -10,11 +10,12 @@ interface MessageListProps {
   animationEnabled?: boolean
   animateMessageId?: number
   isLoading?: boolean
+  isRegenerating?: boolean
   onEditQuestion?: (messageId: number, content: string) => void
   onFollowupClick?: (text: string) => void
 }
 
-export default function MessageList({ messages, onFeedback, theme, animationEnabled, animateMessageId, isLoading, onEditQuestion, onFollowupClick }: MessageListProps) {
+export default function MessageList({ messages, onFeedback, theme, animationEnabled, animateMessageId, isLoading, isRegenerating, onEditQuestion, onFollowupClick }: MessageListProps) {
   const lastUserIndex = [...messages].reverse().findIndex(msg => msg.role === 'user')
   const resolvedLastUserIndex = lastUserIndex === -1 ? -1 : messages.length - 1 - lastUserIndex
   return (
@@ -31,6 +32,7 @@ export default function MessageList({ messages, onFeedback, theme, animationEnab
             animationEnabled={!!animationEnabled}
             animate={animateMessageId === message.id}
             isLoading={!!isLoading}
+            isRegenerating={!!isRegenerating}
             isLastUser={isLastUser}
             onEditQuestion={onEditQuestion}
             onFollowupClick={onFollowupClick}

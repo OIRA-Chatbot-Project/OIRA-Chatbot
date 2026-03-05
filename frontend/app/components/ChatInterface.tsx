@@ -26,6 +26,7 @@ export default function ChatInterface({
   const { getToken } = useAuth()
   const [messages, setMessages] = useState<Message[]>([])
   const [isLoading, setIsLoading] = useState(false)
+  const [isRegenerating, setIsRegenerating] = useState(false)
   const [isLoadingHistory, setIsLoadingHistory] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -439,9 +440,7 @@ export default function ChatInterface({
 
   const regenerateAnswer = async (userMessageId: number, options?: { skipLoading?: boolean }) => {
     const skipLoading = options?.skipLoading === true
-    if (!skipLoading) {
-      setIsLoading(true)
-    }
+    setIsRegenerating(true)
     setError(null)
     try {
       const token = await getToken()
@@ -469,9 +468,6 @@ export default function ChatInterface({
         return next
       })
       setAnimateMessageId(undefined)
-      if (!skipLoading) {
-        setIsLoading(false)
-      }
 
       await streamAssistantMessage(
         `${API_URL}/chat/regenerate/stream`,
@@ -483,15 +479,13 @@ export default function ChatInterface({
       console.error('Error regenerating response:', err)
       setError('Failed to regenerate response. Please try again.')
     } finally {
-      if (!skipLoading) {
-        setIsLoading(false)
-      }
+      setIsRegenerating(false)
     }
   }
 
   const editQuestionAndRegenerate = async (messageId: number, content: string) => {
     if (!content.trim()) return
-    setIsLoading(true)
+    setIsRegenerating(true)
     setError(null)
     try {
       const token = await getToken()
@@ -542,7 +536,7 @@ export default function ChatInterface({
       console.error('Error editing message:', err)
       setError('Failed to edit message. Please try again.')
     } finally {
-      setIsLoading(false)
+      setIsRegenerating(false)
     }
   }
 
@@ -828,6 +822,7 @@ export default function ChatInterface({
           animationEnabled={animationEnabled}
           animateMessageId={animateMessageId}
           isLoading={isLoading}
+          isRegenerating={isRegenerating}
           onEditQuestion={editQuestionAndRegenerate}
           onFollowupClick={(text: string) => sendMessage(text)}
         />
