@@ -127,12 +127,60 @@ class ChatbotService:
         if doc_type == "policy":
             return None
 
-        # Clean filename for URL (remove spaces, special chars)
-        url_safe_filename = source_filename.replace(" ", "%20")
+        # Catalog PDF is served as a stable public asset from the frontend.
+        # Use a relative URL so it works in any environment/domain.
+        return f"/catalog.pdf#page={page}"
 
-        # For now, all PDFs are served from same endpoint with different filenames
-        # Frontend should handle routing to correct PDF
-        return f"http://localhost:3000/{url_safe_filename}#page={page}"
+    def _extract_course_codes(self, docs: List) -> List[str]:
+        """
+        Extract course codes from retrieved docs (e.g., CSCI 306).
+        Used to enrich sequence/plan answers with full course titles.
+        """
+        code_re = re.compile(r'\b[A-Z]{2,4}\s?\d{3}[A-Z]?\b')
+        codes = set()
+        for doc in docs:
+            text = (doc.page_content or "")
+            for m in code_re.finditer(text):
+                code = m.group(0).upper()
+                code = re.sub(r'\s+', ' ', code).strip()
+                codes.add(code)
+        return sorted(codes)
+
+    def _enrich_with_course_entries(self, docs: List, question: str) -> List:
+        """
+        For sequence/plan questions, pull course-entry chunks by course code
+        so titles/descriptions are available to the model.
+        """
+        if not docs or not self._is_sequence_question(question):
+            return docs
+
+        codes = self._extract_course_codes(docs)
+        if not codes:
+            return docs
+
+        # Cap to avoid over-fetching
+        max_codes = 14
+        extra_docs = []
+        for code in codes[:max_codes]:
+            # Try exact course_code metadata match (with and without space)
+            variants = [code, code.replace(" ", "")]
+            found = []
+            for variant in variants:
+                filt = {"$and": [{"doc_type": "catalog"}, {"course_code": variant}]}
+                found = self.vector_store.similarity_search(code, k=1, filter=filt)
+                if found:
+                    break
+
+            if not found:
+                # Fallback: best-effort semantic match within catalog
+                found = self.vector_store.similarity_search(code, k=2, filter={"doc_type": "catalog"})
+
+            if found:
+                extra_docs.extend(found)
+
+        if extra_docs:
+            return self._merge_docs(docs, extra_docs)
+        return docs
 
     def _dedupe_citations(self, citations: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Remove duplicate citations while preserving order."""
@@ -675,6 +723,9 @@ class ChatbotService:
                     print(f"[INFO] Boosted docs added: {len(boosted_docs)}")
                     print(f"[INFO] Retrieved docs (after boost): {len(docs)}")
 
+            # Enrich sequence questions with course-entry chunks (titles/descriptions)
+            docs = self._enrich_with_course_entries(docs, question)
+
             # Handle no results
             if not docs:
                 fallback_message = (
@@ -904,6 +955,9 @@ class ChatbotService:
                     docs = self._merge_docs(docs, boosted_docs)
                     print(f"[INFO] Boosted docs added: {len(boosted_docs)}")
                     print(f"[INFO] Retrieved docs (after boost): {len(docs)}")
+
+            # Enrich sequence questions with course-entry chunks (titles/descriptions)
+            docs = self._enrich_with_course_entries(docs, question)
 
             if not docs:
                 fallback_message = (
