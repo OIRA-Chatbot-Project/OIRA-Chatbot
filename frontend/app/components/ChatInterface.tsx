@@ -48,6 +48,16 @@ export default function ChatInterface({
   const [uploadError, setUploadError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  const dedupeMessagesById = (items: Message[]) => {
+    const seen = new Set<string>()
+    return items.filter((item) => {
+      const key = String(item.id)
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+  }
+
   useEffect(() => {
     // Load conversation history when session changes
     loadConversationHistory()
@@ -105,7 +115,7 @@ export default function ChatInterface({
       })
       if (response.ok) {
         const data = await response.json()
-        setMessages(data.messages)
+        setMessages(dedupeMessagesById(data.messages || []))
         setSeenMessageIds(new Set((data.messages || []).map((m: Message) => m.id)))
         setAnimateMessageId(undefined)
         if (data.messages && data.messages.length > 0) {
@@ -221,11 +231,15 @@ export default function ChatInterface({
 
               case 'user':
                 if (userPlaceholderId && data.message_id) {
-                  setMessages(prev => prev.map(msg =>
-                    msg.id === userPlaceholderId
-                      ? { ...msg, id: data.message_id }
-                      : msg
-                  ))
+                  setMessages(prev =>
+                    dedupeMessagesById(
+                      prev.map(msg =>
+                        msg.id === userPlaceholderId
+                          ? { ...msg, id: data.message_id }
+                          : msg
+                      )
+                    )
+                  )
                   setSeenMessageIds(prev => {
                     const next = new Set(prev)
                     next.delete(userPlaceholderId)
@@ -255,11 +269,15 @@ export default function ChatInterface({
               case 'saved':
                 // Update the placeholder ID with the real DB message ID
                 if (data.message_id) {
-                  setMessages(prev => prev.map(msg =>
-                    msg.id === placeholderId
-                      ? { ...msg, id: data.message_id }
-                      : msg
-                  ))
+                  setMessages(prev =>
+                    dedupeMessagesById(
+                      prev.map(msg =>
+                        msg.id === placeholderId
+                          ? { ...msg, id: data.message_id }
+                          : msg
+                      )
+                    )
+                  )
                   setSeenMessageIds(prev => {
                     const next = new Set(prev)
                     next.delete(placeholderId)
@@ -330,7 +348,7 @@ export default function ChatInterface({
       follow_ups: data.follow_ups || [],
       created_at: new Date().toISOString(),
     }
-    setMessages(prev => [...prev, assistantMessage])
+    setMessages(prev => dedupeMessagesById([...prev, assistantMessage]))
     setSeenMessageIds(prev => {
       const next = new Set(prev)
       next.add(assistantMessage.id)
@@ -356,7 +374,7 @@ export default function ChatInterface({
       content,
       created_at: new Date().toISOString(),
     }
-    setMessages(prev => [...prev, userMessage])
+    setMessages(prev => dedupeMessagesById([...prev, userMessage]))
     setSeenMessageIds(prev => {
       const next = new Set(prev)
       next.add(userMessage.id)
@@ -386,7 +404,7 @@ export default function ChatInterface({
           follow_ups: [],
           created_at: new Date().toISOString(),
         }
-        setMessages(prev => [...prev, placeholderMessage])
+        setMessages(prev => dedupeMessagesById([...prev, placeholderMessage]))
         setSeenMessageIds(prev => {
           const next = new Set(prev)
           next.add(placeholderId)
@@ -490,7 +508,7 @@ export default function ChatInterface({
         follow_ups: [],
         created_at: new Date().toISOString(),
       }
-      setMessages(prev => [...prev, placeholderMessage])
+      setMessages(prev => dedupeMessagesById([...prev, placeholderMessage]))
       setSeenMessageIds(prev => {
         const next = new Set(prev)
         next.add(placeholderId)
@@ -632,7 +650,7 @@ export default function ChatInterface({
         created_at: new Date().toISOString(),
       }
 
-      setMessages(prev => [...prev, scheduleMessage, assistantMessage])
+      setMessages(prev => dedupeMessagesById([...prev, scheduleMessage, assistantMessage]))
       setSeenMessageIds(prev => {
         const next = new Set(prev)
         next.add(scheduleMessage.id)
