@@ -29,7 +29,10 @@ export default function ChatInterface({
   const [isRegenerating, setIsRegenerating] = useState(false)
   const [isLoadingHistory, setIsLoadingHistory] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [showJumpToLatest, setShowJumpToLatest] = useState(false)
+  const messageScrollRef = useRef<HTMLDivElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const shouldAutoScrollRef = useRef(true)
   const [seenMessageIds, setSeenMessageIds] = useState<Set<number>>(new Set())
   const [animateMessageId, setAnimateMessageId] = useState<number | undefined>(undefined)
   const [showSettings, setShowSettings] = useState(false)
@@ -56,12 +59,35 @@ export default function ChatInterface({
   }, [sessionId])
 
   useEffect(() => {
-    // Scroll to bottom when messages change
-    scrollToBottom()
+    // Preserve user-controlled scrolling while streaming.
+    if (shouldAutoScrollRef.current) {
+      scrollToBottom('auto')
+    }
   }, [messages])
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  const isNearBottom = () => {
+    const container = messageScrollRef.current
+    if (!container) return true
+
+    const distanceFromBottom =
+      container.scrollHeight - (container.scrollTop + container.clientHeight)
+
+    return distanceFromBottom <= 120
+  }
+
+  const handleMessagesScroll = () => {
+    const nearBottom = isNearBottom()
+    shouldAutoScrollRef.current = nearBottom
+    setShowJumpToLatest(!nearBottom && messages.length > 0)
+  }
+
+  const enableAutoScroll = () => {
+    shouldAutoScrollRef.current = true
+    setShowJumpToLatest(false)
+  }
+
+  const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
+    messagesEndRef.current?.scrollIntoView({ behavior })
   }
 
   const loadConversationHistory = async () => {
@@ -320,6 +346,8 @@ export default function ChatInterface({
   }
 
   const sendMessage = async (content: string) => {
+    enableAutoScroll()
+
     // Add user message to UI
     const userPlaceholderId = Date.now()
     const userMessage: Message = {
@@ -439,6 +467,7 @@ export default function ChatInterface({
   }
 
   const regenerateAnswer = async (userMessageId: number, options?: { skipLoading?: boolean }) => {
+    enableAutoScroll()
     const skipLoading = options?.skipLoading === true
     setIsRegenerating(true)
     setError(null)
@@ -777,6 +806,8 @@ export default function ChatInterface({
 
       {/* Messages */}
       <div
+        ref={messageScrollRef}
+        onScroll={handleMessagesScroll}
         className={`flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 md:px-8 lg:px-10 py-4 sm:py-6 scrollbar-thin ${
           theme === 'dark'
             ? 'bg-gradient-to-b from-transparent via-slate-950/20 to-slate-950/60'
@@ -861,6 +892,26 @@ export default function ChatInterface({
             }`}
           >
             {error}
+          </div>
+        )}
+
+        {showJumpToLatest && (
+          <div className="sticky bottom-4 z-10 flex justify-end pointer-events-none">
+            <button
+              type="button"
+              onClick={() => {
+                enableAutoScroll()
+                scrollToBottom('smooth')
+              }}
+              className={`pointer-events-auto inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium shadow-lg transition-colors ${
+                theme === 'dark'
+                  ? 'bg-slate-800 text-gray-100 hover:bg-slate-700 border border-slate-600'
+                  : 'bg-white text-gray-800 hover:bg-gray-50 border border-gray-200'
+              }`}
+            >
+              <span className="material-symbols-outlined text-[18px]">south</span>
+              Jump to latest
+            </button>
           </div>
         )}
         
