@@ -215,6 +215,6 @@ backend/chroma.sqlite3
 *.pickle
 *.pem
 backend/data/google_docs_cache/
-
+chroma_db
 backend/chatbot.db
 bash.exe.stackdump
