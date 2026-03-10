@@ -95,7 +95,7 @@ class ChatbotService:
                 category = data.get("category", "course_catalog")
 
                 # Validate category
-                if category in ["course_catalog", "academic_policy", "off_topic"]:
+                if category in ["course_catalog", "academic_policy", "off_topic", "greeting", "thank_you", "clarification_needed"]:
                     print(f"[CLASSIFICATION] Question classified as: {category}")
                     return category
                 else:
@@ -107,6 +107,19 @@ class ChatbotService:
 
         # Fallback to catalog (safer than rejecting)
         return "course_catalog"
+
+    def _get_conversational_response(self, category: str, conversation_history: List[Dict[str, str]]) -> Optional[str]:
+        """Return a static response for conversational categories, or None to continue normal flow."""
+        if category == "greeting":
+            # Short response if there's already conversation history
+            if len(conversation_history) > 2:
+                return config.GREETING_SHORT_MESSAGE
+            return config.GREETING_MESSAGE
+        elif category == "thank_you":
+            return config.THANK_YOU_MESSAGE
+        elif category == "clarification_needed":
+            return config.CLARIFICATION_MESSAGE
+        return None
 
     def _get_document_url(self, source_filename: str, page: int, source_url: Optional[str] = None, doc_type: Optional[str] = None) -> Optional[str]:
         """
@@ -629,7 +642,13 @@ class ChatbotService:
         # STEP 1: Classify the question
         question_category = self._classify_question(question)
 
-        # STEP 2: Reject off-topic questions immediately
+        # STEP 2: Handle conversational responses (greeting, thanks, clarification)
+        conv_response = self._get_conversational_response(question_category, conversation_history)
+        if conv_response is not None:
+            print(f"[{question_category.upper()}] {question}")
+            return (conv_response, [], question_category, [])
+
+        # Reject off-topic questions immediately
         if question_category == "off_topic":
             print(f"[OFF-TOPIC] Question rejected: {question}")
             return (
@@ -874,6 +893,12 @@ class ChatbotService:
         else:
             search_query = results[1]
 
+        # Handle conversational responses (greeting, thanks, clarification)
+        conv_response = self._get_conversational_response(question_category, conversation_history)
+        if conv_response is not None:
+            print(f"[{question_category.upper()}] {question}")
+            return (conv_response, [], question_category, [])
+
         # Reject off-topic questions immediately
         if question_category == "off_topic":
             print(f"[OFF-TOPIC] Question rejected: {question}")
@@ -1062,13 +1087,22 @@ class ChatbotService:
         if isinstance(results[1], Exception):
             print(f"[WARNING] Async contextualization failed: {results[1]}")
 
+        # Conversational responses (greeting, thanks, clarification)
+        conv_response = self._get_conversational_response(question_category, conversation_history)
+        if conv_response is not None:
+            print(f"[{question_category.upper()}] {question}")
+            yield f"event: metadata\ndata: {_json.dumps({'category': question_category, 'citations': []})}\n\n"
+            yield f"event: token\ndata: {_json.dumps({'token': conv_response})}\n\n"
+            yield f"event: done\ndata: {_json.dumps({'answer': conv_response, 'citations': [], 'category': question_category})}\n\n"
+            return
+
         # Off-topic rejection
         if question_category == "off_topic":
             print(f"[OFF-TOPIC] Question rejected: {question}")
             yield f"event: metadata\ndata: {_json.dumps({'category': 'off_topic', 'citations': []})}\n\n"
             # Send the full off-topic message as a single token event
             yield f"event: token\ndata: {_json.dumps({'token': config.OFF_TOPIC_MESSAGE})}\n\n"
-            yield f"event: done\ndata: {_json.dumps({})}\n\n"
+            yield f"event: done\ndata: {_json.dumps({'answer': config.OFF_TOPIC_MESSAGE, 'citations': [], 'category': 'off_topic'})}\n\n"
             return
 
         doc_type_filter = None
@@ -1128,7 +1162,7 @@ class ChatbotService:
                 )
                 yield f"event: metadata\ndata: {_json.dumps({'category': question_category, 'citations': []})}\n\n"
                 yield f"event: token\ndata: {_json.dumps({'token': fallback})}\n\n"
-                yield f"event: done\ndata: {_json.dumps({})}\n\n"
+                yield f"event: done\ndata: {_json.dumps({'answer': fallback, 'citations': [], 'category': question_category})}\n\n"
                 return
 
         except Exception as e:
@@ -1136,7 +1170,7 @@ class ChatbotService:
             error_msg = "Sorry, I ran into an error retrieving information. Please try again later or contact support."
             yield f"event: metadata\ndata: {_json.dumps({'category': question_category, 'citations': []})}\n\n"
             yield f"event: token\ndata: {_json.dumps({'token': error_msg})}\n\n"
-            yield f"event: done\ndata: {_json.dumps({})}\n\n"
+            yield f"event: done\ndata: {_json.dumps({'answer': error_msg, 'citations': [], 'category': question_category})}\n\n"
             return
 
         # Build knowledge + citations

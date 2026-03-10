@@ -80,27 +80,16 @@ DOCUMENT_TYPE_MAPPINGS = {
 }
 
 # Off-Topic Rejection Message
-OFF_TOPIC_MESSAGE = """I'm a specialized chatbot designed to help with Bucknell University academic questions only.
+OFF_TOPIC_MESSAGE = "That one's a bit outside what I cover — I'm set up specifically to help with Bucknell course information and academic policies (things like course requirements, prerequisites, registration, grading, and degree requirements). Feel free to ask me anything in those areas!"
 
-I can assist with:
-- Course information (descriptions, prerequisites, credits)
-- Major and minor requirements
-- Academic policies (registration, grading, withdrawal, etc.)
-- General education requirements
-- Course recommendations
+# Conversational Response Messages
+GREETING_MESSAGE = "Hey there! I'm the Bucknell academic assistant. I can help you with course information (descriptions, prerequisites, credits, recommendations), major and minor requirements, and academic policies (registration, grading, withdrawal, and more). What would you like to know?"
 
-I cannot help with:
-- Non-academic topics (weather, news, general knowledge)
-- Technical support or IT issues
-- Housing, dining, or campus facilities
-- Financial aid or billing questions
-- Social events or student organizations
+GREETING_SHORT_MESSAGE = "Hi again! What can I help you with?"
 
-For non-academic questions, please visit:
-- IT Support: https://bucknell.edu/about/offices-services/library-information-technology
-- Student Affairs: https://bucknell.edu/life-bucknell/student-affairs
+THANK_YOU_MESSAGE = "You're welcome! Let me know if you have any other questions about courses, majors, or academic policies."
 
-Please feel free to ask me any academic-related questions!"""
+CLARIFICATION_MESSAGE = "I'm happy to help! Could you tell me a little more about what you're looking for? You can ask about:\n\n- Courses (e.g., \"What are the prerequisites for ECON 103?\")\n- Majors and minors (e.g., \"What courses do I need for a CS major?\")\n- Academic policies (e.g., \"What's the withdrawal policy?\")"
 
 # Policy Response Disclaimer
 POLICY_DISCLAIMER = """
