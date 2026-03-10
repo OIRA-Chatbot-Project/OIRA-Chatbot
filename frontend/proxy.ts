@@ -6,9 +6,13 @@ const isPublicRoute = createRouteMatcher([
   "/catalog.pdf",            // allow direct PDF access
 ]);
 
-export default clerkMiddleware((auth, req) => {
+export default clerkMiddleware(async (auth, req) => {
   if (!isPublicRoute(req)) {
-    auth().protect();
+    const { userId, redirectToSignIn } = await auth();
+
+    if (!userId) {
+      return redirectToSignIn();
+    }
   }
 });
 

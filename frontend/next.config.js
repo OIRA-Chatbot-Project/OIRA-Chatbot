@@ -5,19 +5,8 @@ const nextConfig = {
   compiler: {
     removeConsole: process.env.NODE_ENV === "production",
   },
-  // Handle browser extension conflicts
-  webpack: (config, { isServer }) => {
-    if (!isServer) {
-      // Ignore chrome extension errors in browser
-      config.resolve.fallback = {
-        ...config.resolve.fallback,
-        fs: false,
-        net: false,
-        tls: false,
-      };
-    }
-    return config;
-  },
+  // Explicit Turbopack config for Next 16+.
+  turbopack: {},
 };
 
 module.exports = nextConfig;
