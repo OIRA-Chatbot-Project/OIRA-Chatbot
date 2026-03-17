@@ -1,3 +1,9 @@
+"""
+Administrative routes.
+
+This module provides API endpoints for administrative tasks, such as triggering
+database ingestion.
+"""
 from fastapi import APIRouter, HTTPException
 import subprocess
 
@@ -6,13 +12,16 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 
 @router.post("/ingest")
 async def trigger_ingestion():
-    """
-    Trigger re-ingestion of PDFs from data/ folder
+    """Trigger re-ingestion of documents into the vector database.
     
-    Note: This is a placeholder. In production, you might want to:
-    - Add authentication/authorization
-    - Run ingestion in background task
-    - Return job status
+    This endpoint runs the ingestion script to process PDF documents and Google Docs,
+    updating the Chroma vector database.
+
+    Returns:
+        dict: A success message if ingestion completes.
+
+    Raises:
+        HTTPException: If the ingestion process fails.
     """
     try:
         # Import and run ingestion script

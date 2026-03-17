@@ -1,3 +1,9 @@
+"""
+Pydantic models for API requests and responses.
+
+This module defines the data validation and serialization schemas used by the API endpoints,
+including models for users, chat sessions, messages, feedback, and more.
+"""
 from pydantic import BaseModel, Field
 from typing import List, Optional
 from datetime import datetime

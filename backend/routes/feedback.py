@@ -1,3 +1,8 @@
+"""
+Feedback management routes.
+
+This module provides API endpoints for submitting user feedback on assistant responses.
+"""
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -14,12 +19,21 @@ async def submit_feedback(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """
-    Submit feedback for an assistant message
+    """Submit feedback for an assistant message.
     
-    - Accepts thumbs up (1) or thumbs down (-1) rating
-    - Optional note for additional feedback
-    - Stores feedback in database for analytics
+    This endpoint allows users to rate an assistant's response (thumbs up/down)
+    and optionally provide a text note. Feedback is stored for analysis.
+
+    Args:
+        request: The feedback request containing session ID, message ID, rating, and note.
+        current_user: The authenticated user information.
+        db: The database session.
+
+    Returns:
+        FeedbackResponse: An object indicating success and the ID of the created feedback record.
+
+    Raises:
+        HTTPException: If the user, session, or message is not found, or if validation fails.
     """
     try:
         # Get user ID from token

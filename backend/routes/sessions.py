@@ -1,3 +1,9 @@
+"""
+Session management routes.
+
+This module provides API endpoints for managing chat sessions, including
+retrieving, deleting, updating, and generating titles for sessions.
+"""
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import Optional
@@ -19,10 +25,14 @@ async def get_user_sessions(
     db: Session = Depends(get_db)
 ):
     """
-    Retrieve all sessions for the authenticated user
-    
-    - Returns list of sessions with metadata
-    - Used to display session history/switcher
+    Retrieve all sessions for the authenticated user.
+
+    Args:
+        current_user (dict): The authenticated user information.
+        db (Session): The database session.
+
+    Returns:
+        SessionsResponse: A list of sessions with metadata and message counts.
     """
     try:
         # Get user ID from token
@@ -79,6 +89,17 @@ async def delete_session(
 ):
     """
     Delete a session and its messages for the authenticated user.
+
+    Args:
+        session_id (str): The ID of the session to delete.
+        current_user (dict): The authenticated user information.
+        db (Session): The database session.
+
+    Returns:
+        dict: A confirmation message indicating success.
+    
+    Raises:
+        HTTPException: If the user or session is not found, or if an error occurs.
     """
     try:
         clerk_user_id = get_user_id_from_token(current_user)
@@ -105,18 +126,34 @@ async def delete_session(
 
 
 class GenerateTitleRequest(BaseModel):
-    """Request to generate a title for a session"""
+    """
+    Request model for generating a session title.
+
+    Attributes:
+        session_id (str): The unique identifier of the session.
+        first_message (str): The first message content to base the title on.
+    """
     session_id: str
     first_message: str
 
 
 class GenerateTitleResponse(BaseModel):
-    """Response with generated title"""
+    """
+    Response model containing the generated session title.
+
+    Attributes:
+        title (str): The generated title for the session.
+    """
     title: str
 
 
 class UpdateSessionRequest(BaseModel):
-    """Update a session's title"""
+    """
+    Request model for updating a session.
+
+    Attributes:
+        title (Optional[str]): The new title for the session.
+    """
     title: Optional[str] = None
 
 
@@ -128,12 +165,20 @@ async def generate_session_title(
 ):
     """
     Generate an AI-powered title for a chat session based on the first message.
-    Similar to ChatGPT's auto-title generation.
-    
-    - Takes the first user message
-    - Uses LLM to generate a concise, descriptive title (3-5 words)
-    - Updates the session in the database
-    - Returns the generated title
+
+    This function uses an LLM to generate a concise, descriptive title based on
+    the user's first message in the session.
+
+    Args:
+        request (GenerateTitleRequest): The request containing session ID and first message.
+        current_user (dict): The authenticated user information.
+        db (Session): The database session.
+
+    Returns:
+        GenerateTitleResponse: The generated title.
+
+    Raises:
+        HTTPException: If the user or session is not found, or if title generation fails.
     """
     try:
         # Get user ID from token
@@ -202,7 +247,19 @@ async def update_session(
     db: Session = Depends(get_db)
 ):
     """
-    Update a session's title or pinned status.
+    Update a session's title.
+
+    Args:
+        session_id (str): The ID of the session to update.
+        request (UpdateSessionRequest): The request containing the new title.
+        current_user (dict): The authenticated user information.
+        db (Session): The database session.
+
+    Returns:
+        dict: A confirmation message indicating success.
+
+    Raises:
+        HTTPException: If the user or session is not found, or if the title is invalid.
     """
     try:
         clerk_user_id = get_user_id_from_token(current_user)

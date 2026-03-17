@@ -1,3 +1,10 @@
+"""
+Utilities for parsing student schedules from images or text.
+
+This module provides functions to extract text from uploaded schedule images
+(using OCR) or text files, and parse the extracted text into structured
+course entries.
+"""
 import io
 import os
 import re
@@ -22,8 +29,19 @@ TERM_PATTERN = re.compile(r'(Fall|Spring|Summer|Winter)\s*(\d{2,4})?', re.IGNORE
 
 
 def extract_text_from_upload(content: bytes, filename: str) -> str:
-    """
-    Extract raw text from an uploaded file. Supports common image formats and plain text/csv files.
+    """Extract raw text from an uploaded file.
+
+    Supports common image formats and plain text/csv files.
+
+    Args:
+        content: The raw file content in bytes.
+        filename: The original filename.
+
+    Returns:
+        str: The extracted text.
+
+    Raises:
+        ValueError: If the file is empty, unsupported, or if OCR fails.
     """
     if not content:
         raise ValueError("Uploaded file is empty.")
@@ -56,8 +74,14 @@ def extract_text_from_upload(content: bytes, filename: str) -> str:
 
 
 def parse_schedule_entries(raw_text: str) -> List[Dict[str, str]]:
-    """
-    Parse OCR'd schedule text into structured course entries.
+    """Parse OCR'd schedule text into structured course entries.
+
+    Args:
+        raw_text: The raw text extracted from the schedule.
+
+    Returns:
+        List[Dict[str, str]]: A list of dictionaries containing course details
+        (course_code, term, notes).
     """
     entries: List[Dict[str, str]] = []
     if not raw_text:
@@ -91,8 +115,13 @@ def parse_schedule_entries(raw_text: str) -> List[Dict[str, str]]:
 
 
 def summarize_schedule(entries: List[Dict[str, str]]) -> str:
-    """
-    Build a human-readable summary of parsed courses.
+    """Build a human-readable summary of parsed courses.
+
+    Args:
+        entries: A list of parsed course dictionaries.
+
+    Returns:
+        str: A formatted summary string suitable for the LLM.
     """
     if not entries:
         return "No readable courses were detected in the uploaded schedule."
@@ -110,8 +139,13 @@ def summarize_schedule(entries: List[Dict[str, str]]) -> str:
 
 
 def _prepare_image_for_ocr(image: Image.Image) -> Image.Image:
-    """
-    Enhance uploaded images to improve OCR accuracy.
+    """Enhance uploaded images to improve OCR accuracy.
+
+    Args:
+        image: The original PIL Image.
+
+    Returns:
+        Image.Image: The processed PIL Image.
     """
     image = ImageOps.exif_transpose(image)
     if image.mode not in ("L", "RGB"):

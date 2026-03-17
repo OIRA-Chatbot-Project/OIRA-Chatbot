@@ -1,3 +1,9 @@
+"""
+Chat interaction routes.
+
+This module provides API endpoints for the main chat functionality, including
+sending messages, regenerating responses, and streaming responses.
+"""
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
@@ -19,15 +25,26 @@ async def chat(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """
-    Process a chat message and return an answer with citations
+    """Process a chat message and return an answer with citations.
 
-    - Creates a session if it doesn't exist
-    - Logs the user's message
-    - Retrieves relevant information from ChromaDB
-    - Generates an answer using OpenAI
-    - Logs the assistant's response with citations
-    - Returns the answer and message ID
+    This endpoint:
+    1. Creates a session if it doesn't exist.
+    2. Logs the user's message.
+    3. Retrieves relevant information from ChromaDB via the ChatbotService.
+    4. Generates an answer using OpenAI.
+    5. Logs the assistant's response with citations.
+    6. Returns the answer and message ID.
+
+    Args:
+        request: The chat request containing session ID and message.
+        current_user: The authenticated user information.
+        db: The database session.
+
+    Returns:
+        ChatResponse: The generated answer, citations, and message metadata.
+
+    Raises:
+        HTTPException: If the user is not found, or if an error occurs during processing.
     """
     try:
         # Get user ID from token
@@ -125,7 +142,14 @@ async def chat(
 
 
 def _clean_answer(answer: str) -> str:
-    """Remove inline bracket citations and normalize spacing."""
+    """Remove inline bracket citations and normalize spacing.
+
+    Args:
+        answer: The raw answer string.
+
+    Returns:
+        str: The cleaned answer string.
+    """
     try:
         cleaned = re.sub(r"\[[^\]]+?,\s*p\.\s*\d+\]", "", answer)
         cleaned = re.sub(r"\s+([,.;:!?])", r"\1", cleaned)
@@ -142,12 +166,23 @@ async def regenerate(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """
-    Regenerate an assistant answer for an existing user message.
+    """Regenerate an assistant answer for an existing user message.
 
-    - Removes messages after the target user message
-    - Uses prior conversation history for context
-    - Stores a new assistant message
+    This endpoint:
+    1. Removes messages after the target user message.
+    2. Uses prior conversation history for context.
+    3. Stores a new assistant message.
+
+    Args:
+        request: The regenerate request containing session ID and user message ID.
+        current_user: The authenticated user information.
+        db: The database session.
+
+    Returns:
+        ChatResponse: The new generated answer and metadata.
+
+    Raises:
+        HTTPException: If the user, session, or message is not found.
     """
     try:
         clerk_user_id = get_user_id_from_token(current_user)
@@ -239,8 +274,9 @@ async def chat_stream(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """
-    SSE streaming endpoint for chat responses.
+    """SSE streaming endpoint for chat responses.
+
+    Streams events including metadata, tokens, follow-up questions, and completion status.
 
     Events:
     - metadata: {category, citations} — sent before streaming starts
@@ -248,6 +284,14 @@ async def chat_stream(
     - followups: {follow_ups} — generated after stream completes
     - saved: {message_id} — after DB persistence
     - done: {} — signals end of stream
+
+    Args:
+        request: The chat request.
+        current_user: The authenticated user information.
+        db: The database session.
+
+    Returns:
+        StreamingResponse: An SSE stream of events.
     """
     # Auth + session setup (same as /chat)
     clerk_user_id = get_user_id_from_token(current_user)
@@ -353,8 +397,17 @@ async def regenerate_stream(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """
-    SSE streaming endpoint for regenerating an assistant response.
+    """SSE streaming endpoint for regenerating an assistant response.
+
+    Similar to chat_stream, but operates on an existing conversation point.
+
+    Args:
+        request: The regenerate request.
+        current_user: The authenticated user information.
+        db: The database session.
+
+    Returns:
+        StreamingResponse: An SSE stream of events.
     """
     clerk_user_id = get_user_id_from_token(current_user)
     user = db.query(DBUser).filter(DBUser.clerk_user_id == clerk_user_id).first()

@@ -1,3 +1,11 @@
+"""
+Service for handling chatbot RAG (Retrieval-Augmented Generation) operations.
+
+This module defines the ChatbotService class, which manages the interaction
+between the user, the vector database (Chroma), and the LLM (OpenAI).
+It handles query classification, decomposition, document retrieval,
+response generation, and follow-up suggestion.
+"""
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_chroma import Chroma
 from langchain_core.messages import SystemMessage, HumanMessage
@@ -54,15 +62,21 @@ class ChatbotService:
         )
     
     def _short_source(self, path: str) -> str:
-        """Turn a long file path into a friendly filename for citations."""
+        """Turn a long file path into a friendly filename for citations.
+
+        Args:
+            path: The full file path.
+
+        Returns:
+            str: The friendly filename.
+        """
         if not path:
             return "Source"
         name = os.path.basename(path)
         return name.replace("_", " ")
 
     def _classify_question(self, question: str) -> str:
-        """
-        Classify a question as 'course_catalog', 'academic_policy', or 'off_topic'.
+        """Classify a question as 'course_catalog', 'academic_policy', or 'off_topic'.
 
         This pre-retrieval classification allows us to:
         1. Reject off-topic questions immediately
@@ -72,8 +86,8 @@ class ChatbotService:
             question: The user's question
 
         Returns:
-            One of: 'course_catalog', 'academic_policy', 'off_topic'
-            Falls back to 'course_catalog' on error
+            str: One of 'course_catalog', 'academic_policy', 'off_topic', 'greeting',
+            'thank_you', or 'clarification_needed'. Falls back to 'course_catalog' on error.
         """
         if not config.ENABLE_OFF_TOPIC_DETECTION:
             # Classification disabled - default to catalog
@@ -109,7 +123,15 @@ class ChatbotService:
         return "course_catalog"
 
     def _get_conversational_response(self, category: str, conversation_history: List[Dict[str, str]]) -> Optional[str]:
-        """Return a static response for conversational categories, or None to continue normal flow."""
+        """Return a static response for conversational categories.
+
+        Args:
+            category: The classification category of the user's input.
+            conversation_history: The history of the conversation.
+
+        Returns:
+            Optional[str]: A static response string, or None if the category requires RAG.
+        """
         if category == "greeting":
             # Short response if there's already conversation history
             if len(conversation_history) > 2:
@@ -122,9 +144,7 @@ class ChatbotService:
         return None
 
     def _get_document_url(self, source_filename: str, page: int, source_url: Optional[str] = None, doc_type: Optional[str] = None) -> Optional[str]:
-        """
-        This is for the Reference block under each answer.
-        Generate appropriate URL for a document citation based on its source.
+        """Generate appropriate URL for a document citation based on its source.
 
         Args:
             source_filename: Base filename (e.g., "GRADE REPLACEMENT POLICY.pdf")
@@ -133,7 +153,7 @@ class ChatbotService:
             doc_type: Optional document type (e.g., "catalog", "policy")
 
         Returns:
-            URL string for frontend to link to
+            Optional[str]: URL string for the frontend to link to, or None if no link is available.
         """
         if source_url:
             return source_url
@@ -145,9 +165,15 @@ class ChatbotService:
         return f"/catalog.pdf#page={page}"
 
     def _extract_course_codes(self, docs: List) -> List[str]:
-        """
-        Extract course codes from retrieved docs (e.g., CSCI 306).
+        """Extract course codes from retrieved docs (e.g., CSCI 306).
+
         Used to enrich sequence/plan answers with full course titles.
+
+        Args:
+            docs: List of retrieved documents.
+
+        Returns:
+            List[str]: A sorted list of unique course codes found in the documents.
         """
         code_re = re.compile(r'\b[A-Z]{2,4}\s?\d{3}[A-Z]?\b')
         codes = set()
@@ -160,9 +186,16 @@ class ChatbotService:
         return sorted(codes)
 
     def _enrich_with_course_entries(self, docs: List, question: str) -> List:
-        """
-        For sequence/plan questions, pull course-entry chunks by course code
-        so titles/descriptions are available to the model.
+        """For sequence/plan questions, pull course-entry chunks by course code.
+
+        This ensures titles/descriptions are available to the model.
+
+        Args:
+            docs: List of initially retrieved documents.
+            question: The user's question.
+
+        Returns:
+            List: Enriched list of documents including specific course entries.
         """
         if not docs or not self._is_sequence_question(question):
             return docs
@@ -196,7 +229,14 @@ class ChatbotService:
         return docs
 
     def _dedupe_citations(self, citations: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Remove duplicate citations while preserving order."""
+        """Remove duplicate citations while preserving order.
+
+        Args:
+            citations: List of citation dictionaries.
+
+        Returns:
+            List[Dict[str, Any]]: Deduplicated list of citations.
+        """
         seen = set()
         deduped: List[Dict[str, Any]] = []
         for c in citations:
@@ -212,9 +252,15 @@ class ChatbotService:
         return deduped
 
     def _prepare_knowledge(self, docs) -> str:
-        """
-        Build a labeled context string so the model can cite pages.
+        """Build a labeled context string so the model can cite pages.
+
         Each chunk gets headers before and after for better citation tracking.
+
+        Args:
+            docs: List of documents to format.
+
+        Returns:
+            str: The formatted context string.
         """
         parts = []
         for d in docs:
@@ -229,24 +275,30 @@ class ChatbotService:
         return "\n".join(parts)
 
     def _normalize_text(self, text: str) -> str:
-        """
-        Normalize spacing artifacts from PDF extraction and model output.
+        """Normalize spacing artifacts from PDF extraction and model output.
+
         Removes spaces before common punctuation.
+
+        Args:
+            text: The text to normalize.
+
+        Returns:
+            str: The normalized text.
         """
         if not text:
             return text
         return re.sub(r"\s+([,.;:!?])", r"\1", text)
     
     def _decompose_query(self, question: str) -> List[str]:
-        """
-        Decompose a complex query into multiple sub-questions using structured JSON output.
+        """Decompose a complex query into multiple sub-questions using structured JSON output.
+        
         This helps with comparison queries, multi-part questions, and complex reasoning.
         
         Args:
-            question: The original user question
+            question: The original user question.
             
         Returns:
-            List of sub-questions (or single question if decomposition not needed)
+            List[str]: List of sub-questions (or single question if decomposition not needed).
         """
         decompose_prompt = get_decompose_prompt(question)
 
@@ -287,8 +339,7 @@ class ChatbotService:
         return [question]
     
     def _retrieve_for_subqueries(self, sub_questions: List[str], doc_type_filter: Optional[str] = None) -> List:
-        """
-        Retrieve documents for multiple sub-questions with adaptive allocation.
+        """Retrieve documents for multiple sub-questions with adaptive allocation.
 
         Strategy:
         1. Guarantee minimum documents per sub-question
@@ -296,11 +347,11 @@ class ChatbotService:
         3. Use round-robin for balanced representation
 
         Args:
-            sub_questions: List of sub-questions to retrieve for
-            doc_type_filter: Optional document type to filter by ('catalog' or 'policy')
+            sub_questions: List of sub-questions to retrieve for.
+            doc_type_filter: Optional document type to filter by ('catalog' or 'policy').
 
         Returns:
-            Combined list of unique documents
+            List: Combined list of unique documents.
         """
         num_subqueries = len(sub_questions)
         if num_subqueries == 0:
@@ -374,7 +425,15 @@ class ChatbotService:
         return all_docs
 
     async def _retrieve_single_query_async(self, query: str, doc_type_filter: Optional[str] = None) -> List:
-        """Run a single retrieval call in a thread for async usage."""
+        """Run a single retrieval call in a thread for async usage.
+
+        Args:
+            query: The search query.
+            doc_type_filter: Optional document type filter.
+
+        Returns:
+            List: A list of retrieved documents.
+        """
         try:
             if doc_type_filter:
                 return await asyncio.to_thread(
@@ -389,9 +448,16 @@ class ChatbotService:
             return []
 
     async def _retrieve_for_subqueries_async(self, sub_questions: List[str], doc_type_filter: Optional[str] = None) -> List:
-        """
-        Async version of _retrieve_for_subqueries — fires all sub-question
-        retrievals in parallel, then applies the same Phase 1 + Phase 2 merge logic.
+        """Async version of _retrieve_for_subqueries.
+        
+        Fires all sub-question retrievals in parallel, then applies the same Phase 1 + Phase 2 merge logic.
+
+        Args:
+            sub_questions: List of sub-questions.
+            doc_type_filter: Optional document type filter.
+
+        Returns:
+            List: Combined list of unique documents.
         """
         num_subqueries = len(sub_questions)
         if num_subqueries == 0:
@@ -446,7 +512,15 @@ class ChatbotService:
         return all_docs
 
     def _merge_docs(self, base_docs: List, extra_docs: List) -> List:
-        """Merge document lists, de-duplicating by (source, page)."""
+        """Merge document lists, de-duplicating by (source, page).
+
+        Args:
+            base_docs: The primary list of documents.
+            extra_docs: The list of documents to add.
+
+        Returns:
+            List: The merged list of documents.
+        """
         merged = list(base_docs)
         seen = set()
         for d in merged:
@@ -461,15 +535,14 @@ class ChatbotService:
         return merged
     
     def _build_contextual_query(self, question: str, conversation_history: List[Dict[str, str]]) -> str:
-        """
-        Build a contextual query that incorporates conversation history for better follow-up handling.
+        """Build a contextual query that incorporates conversation history for better follow-up handling.
         
         Args:
-            question: Current user question
-            conversation_history: Previous conversation turns
+            question: Current user question.
+            conversation_history: Previous conversation turns.
             
         Returns:
-            Standalone query that includes necessary context
+            str: Standalone query that includes necessary context.
         """
         if not conversation_history:
             return question
@@ -500,9 +573,15 @@ class ChatbotService:
         return question
 
     def _is_simple_query(self, question: str) -> bool:
-        """
-        Heuristic check to determine if a query is simple enough to skip decomposition.
+        """Heuristic check to determine if a query is simple enough to skip decomposition.
+
         Simple queries are short, single-topic questions without multi-part markers.
+
+        Args:
+            question: The query to check.
+
+        Returns:
+            bool: True if the query is simple, False otherwise.
         """
         words = question.split()
         if len(words) > config.SIMPLE_QUERY_MAX_WORDS:
@@ -535,7 +614,14 @@ class ChatbotService:
         return True
 
     def _is_sequence_question(self, question: str) -> bool:
-        """Heuristic check for questions asking about a major/course sequence or plan."""
+        """Heuristic check for questions asking about a major/course sequence or plan.
+
+        Args:
+            question: The user's question.
+
+        Returns:
+            bool: True if it appears to be a sequence question.
+        """
         q = question.lower()
         return any(
             key in q
@@ -550,9 +636,16 @@ class ChatbotService:
         )
 
     def _expand_sequence_queries(self, base_query: str, question: str) -> List[str]:
-        """
-        Expand sequence-style questions with related retrieval queries.
+        """Expand sequence-style questions with related retrieval queries.
+
         Keeps expansions short and catalog-focused to avoid off-topic noise.
+
+        Args:
+            base_query: The base search query.
+            question: The original user question.
+
+        Returns:
+            List[str]: A list of expanded queries.
         """
         expansions = [
             base_query,
@@ -577,9 +670,15 @@ class ChatbotService:
         return deduped
 
     def _generate_followups(self, question: str, answer: str, conversation_history: List[Dict[str, str]]) -> List[str]:
-        """
-        Generate up to 5 suggested follow-up questions tailored to the user's context
-        present in the conversation history. Returns a list of suggestion strings.
+        """Generate up to 5 suggested follow-up questions tailored to the user's context.
+
+        Args:
+            question: The user's question.
+            answer: The assistant's generated answer.
+            conversation_history: The history of the conversation.
+
+        Returns:
+            List[str]: A list of suggestion strings.
         """
         # Build a concise history string for the prompt
         history_text = "\n".join([
@@ -627,17 +726,21 @@ class ChatbotService:
         return fallback[:3]
     
     def get_answer(self, question: str, conversation_history: List[Dict[str, str]], use_multi_step: Optional[bool] = None) -> Tuple[str, List[Dict], str, List[str]]:
-        """
-        Get an answer to a question using RAG with optional multi-step query decomposition.
+        """Get an answer to a question using RAG with optional multi-step query decomposition.
+
         Now includes question classification and document type filtering.
 
         Args:
-            question: The user's question
-            conversation_history: List of previous messages with 'role' and 'content'
-            use_multi_step: Whether to use multi-step query decomposition (default: from config)
+            question: The user's question.
+            conversation_history: List of previous messages with 'role' and 'content'.
+            use_multi_step: Whether to use multi-step query decomposition (default: from config).
 
         Returns:
-            Tuple of (answer, citations, question_category)
+            Tuple[str, List[Dict], str, List[str]]: A tuple containing:
+                - answer (str): The generated answer.
+                - citations (List[Dict]): List of citations.
+                - question_category (str): The classification of the question.
+                - followups (List[str]): List of follow-up questions.
         """
         # STEP 1: Classify the question
         question_category = self._classify_question(question)
@@ -855,9 +958,14 @@ class ChatbotService:
             )
 
     def recommend_courses_from_schedule(self, schedule_summary: str, conversation_history: List[Dict[str, str]]) -> Tuple[str, List[Dict], str]:
-        """
-        Provide course recommendations using a student's prior schedule summary.
-        Returns tuple of (answer, citations, question_category).
+        """Provide course recommendations using a student's prior schedule summary.
+
+        Args:
+            schedule_summary: A summary of the student's schedule.
+            conversation_history: The history of the conversation.
+
+        Returns:
+            Tuple[str, List[Dict], str]: A tuple of (answer, citations, question_category).
         """
         question = (
             "A student shared their previously completed courses and experiences:\n"
@@ -869,9 +977,15 @@ class ChatbotService:
         return self.get_answer(question, conversation_history)
 
     async def get_answer_async(self, question: str, conversation_history: List[Dict[str, str]], use_multi_step: Optional[bool] = None) -> Tuple[str, List[Dict], str, List[str]]:
-        """
-        Async version of get_answer that parallelizes classification and contextualization.
-        Returns the same tuple: (answer, citations, question_category, followups)
+        """Async version of get_answer that parallelizes classification and contextualization.
+
+        Args:
+            question: The user's question.
+            conversation_history: List of previous messages.
+            use_multi_step: Whether to use multi-step query decomposition.
+
+        Returns:
+            Tuple[str, List[Dict], str, List[str]]: (answer, citations, question_category, followups).
         """
         # STEP 1 & 2: Run classification and contextualization in parallel
         classify_task = asyncio.to_thread(self._classify_question, question)
@@ -1068,9 +1182,17 @@ class ChatbotService:
             )
 
     async def get_answer_streaming(self, question: str, conversation_history: List[Dict[str, str]], use_multi_step: Optional[bool] = None):
-        """
-        Async generator that yields SSE-formatted events for streaming responses.
+        """Async generator that yields SSE-formatted events for streaming responses.
+
         Events: metadata, token, followups, done
+
+        Args:
+            question: The user's question.
+            conversation_history: List of previous messages.
+            use_multi_step: Whether to use multi-step query decomposition.
+
+        Yields:
+            str: SSE-formatted event strings.
         """
         import json as _json
 
@@ -1254,7 +1376,11 @@ class ChatbotService:
 _chatbot_service_instance = None
 
 def get_chatbot_service() -> ChatbotService:
-    """Get or create the global chatbot service instance (lazy initialization)"""
+    """Get or create the global chatbot service instance (lazy initialization).
+
+    Returns:
+        ChatbotService: The singleton instance of ChatbotService.
+    """
     global _chatbot_service_instance
     if _chatbot_service_instance is None:
         _chatbot_service_instance = ChatbotService()

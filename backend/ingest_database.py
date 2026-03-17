@@ -1,10 +1,9 @@
-# ingest_database.py
 """
-Builds/updates the Chroma vector DB from PDFs in ./data.
-- Uses OpenAI embeddings (text-embedding-3-large)
-- Preserves PDF metadata (source path + page + doc_type) for later citations
-- Larger chunk size (1200/200) to keep course context together
-- Classifies documents as 'catalog' or 'policy' based on filename
+Ingest script for building and updating the Chroma vector database.
+
+This module processes PDF documents and Google Docs, chunks them,
+generates embeddings, and stores them in a Chroma vector store.
+It handles document classification and metadata extraction.
 """
 
 from uuid import uuid4
@@ -81,9 +80,13 @@ SECTION_PATTERNS = {
 }
 
 def assign_section_metadata(text: str) -> str:
-    """
-    Heuristic section tagging to help retrieval for sequence/core/requirements blocks.
-    Returns a section label or empty string if no match.
+    """Heuristic section tagging to help retrieval for sequence/core/requirements blocks.
+
+    Args:
+        text: The text content to analyze.
+
+    Returns:
+        str: A section label (e.g., 'freeman_core', 'sequence') or empty string if no match.
     """
     t = (text or "").lower()
     for section, needles in SECTION_PATTERNS.items():
@@ -92,16 +95,30 @@ def assign_section_metadata(text: str) -> str:
     return ""
 
 def _get_page_for_offset(text: str, offset: int) -> int:
-    """Return 0-based page number for a byte offset in a marker-annotated string."""
+    """Return 0-based page number for a byte offset in a marker-annotated string.
+
+    Args:
+        text: The text containing page markers.
+        offset: The byte offset to find the page for.
+
+    Returns:
+        int: The 0-based page number.
+    """
     matches = list(PAGE_MARKER_RE.finditer(text, 0, offset))
     if not matches:
         return 0
     return int(matches[-1].group(1))
 
 def extract_course_documents(catalog_docs: list) -> list:
-    """
-    Extract course-level documents from the catalog so each course entry is its own chunk.
+    """Extract course-level documents from the catalog so each course entry is its own chunk.
+
     This reduces course-title/description bleed between adjacent courses.
+
+    Args:
+        catalog_docs: List of catalog documents.
+
+    Returns:
+        list: A list of Document objects representing individual courses.
     """
     if not catalog_docs:
         return []

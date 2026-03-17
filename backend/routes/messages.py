@@ -1,3 +1,8 @@
+"""
+Message management routes.
+
+This module provides API endpoints for retrieving and editing chat messages.
+"""
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 import json
@@ -16,12 +21,22 @@ async def get_messages(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """
-    Retrieve all messages for a given session
+    """Retrieve all messages for a given session.
     
-    - Returns full conversation history
-    - Includes citations for assistant messages
-    - Used to restore chat history when user returns
+    This endpoint returns the full conversation history for a session,
+    including citations for assistant messages. It is used to restore
+    chat history when a user returns to a session.
+
+    Args:
+        session_id: The ID of the session to retrieve messages for.
+        current_user: The authenticated user information.
+        db: The database session.
+
+    Returns:
+        MessagesResponse: An object containing the session ID and list of messages.
+
+    Raises:
+        HTTPException: If the user is not found or an error occurs.
     """
     try:
         # Get user ID from token
@@ -84,8 +99,21 @@ async def edit_message(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """
-    Edit a user message and remove any subsequent messages.
+    """Edit a user message and remove any subsequent messages.
+
+    This allows the user to correct a previous query. All messages following
+    the edited message are deleted to maintain a consistent conversation history.
+
+    Args:
+        request: The edit request containing session ID, message ID, and new content.
+        current_user: The authenticated user information.
+        db: The database session.
+
+    Returns:
+        EditMessageResponse: An object indicating success and listing deleted message IDs.
+
+    Raises:
+        HTTPException: If the user, session, or message is not found, or if validation fails.
     """
     try:
         clerk_user_id = get_user_id_from_token(current_user)

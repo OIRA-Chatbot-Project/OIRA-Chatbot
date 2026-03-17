@@ -218,3 +218,8 @@ backend/data/google_docs_cache/
 chroma_db
 backend/chatbot.db
 bash.exe.stackdump
+
+# Claude 
+.claude
+# Gemini
+GEMINI.md
