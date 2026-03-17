@@ -8,6 +8,40 @@ import { Message, Theme, ScheduleUploadResponse } from '../types'
 import { API_URL } from '../utils/config'
 import { generateSessionTitle } from '../utils/session'
 
+const CATALOG_SUGGESTED_QUESTIONS = [
+  'What are the requirements for the Computer Science major?',
+  'Tell me about CSCI 204.',
+  'What are the prerequisites for MATH 211?',
+  'What courses should I take for a Computer Science major?',
+  'Tell me about the Engineering program.',
+  'What are the prerequisites for ECON 103?',
+]
+
+const POLICY_SUGGESTED_QUESTIONS = [
+  'What is the withdrawal policy?',
+  'How do I appeal a grade?',
+  'What are the requirements to graduate?',
+  'Can I get credit for AP exams?',
+  'What happens if I fail a class?',
+  'How do I declare a minor?',
+]
+
+const shuffle = <T,>(items: T[]): T[] => {
+  const next = [...items]
+  for (let i = next.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[next[i], next[j]] = [next[j], next[i]]
+  }
+  return next
+}
+
+const buildSuggestedQuestions = () => {
+  return [
+    ...shuffle(CATALOG_SUGGESTED_QUESTIONS).slice(0, 3),
+    ...shuffle(POLICY_SUGGESTED_QUESTIONS).slice(0, 3),
+  ]
+}
+
 interface ChatInterfaceProps {
   sessionId: string
   onSessionTitleUpdate?: (sessionId: string, title: string) => void
@@ -46,6 +80,7 @@ export default function ChatInterface({
   })
   const [isUploadingSchedule, setIsUploadingSchedule] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
+  const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>(() => buildSuggestedQuestions())
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const dedupeMessagesById = (items: Message[]) => {
@@ -61,6 +96,7 @@ export default function ChatInterface({
   useEffect(() => {
     // Load conversation history when session changes
     loadConversationHistory()
+    setSuggestedQuestions(buildSuggestedQuestions())
     setUploadError(null)
     setIsUploadingSchedule(false)
     if (fileInputRef.current) {
@@ -843,7 +879,7 @@ export default function ChatInterface({
                 Welcome to the Bucknell Course Catalog Assistant! 👋
               </h2>
               <p className={`mb-4 text-sm sm:text-base ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
-                I can help you find information about courses, majors, prerequisites, and academic planning.
+                I can help with Bucknell course catalog details and official academic policies.
               </p>
               <div
                 className={`text-left rounded-2xl p-5 space-y-2 ${
@@ -852,13 +888,23 @@ export default function ChatInterface({
                     : 'bg-white text-gray-700 border border-gray-100 shadow'
                 }`}
               >
-                <p className="text-sm font-medium">Try asking:</p>
-                <ul className="text-sm space-y-1">
-                  <li>• "What are the requirements for a Computer Science major?"</li>
-                  <li>• "Tell me about CSCI 204"</li>
-                  <li>• "What courses should I take as a first-year student?"</li>
-                  <li>• "What are the prerequisites for upper-level math courses?"</li>
-                </ul>
+                <p className="text-sm font-medium">Try asking one of these:</p>
+                <div className="grid gap-2">
+                  {suggestedQuestions.map((question) => (
+                    <button
+                      key={question}
+                      type="button"
+                      onClick={() => sendMessage(question)}
+                      className={`w-full rounded-2xl border px-4 py-3 text-left text-sm transition-colors ${
+                        theme === 'dark'
+                          ? 'border-slate-700 bg-slate-950/40 hover:border-slate-500 hover:bg-slate-900'
+                          : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-slate-50'
+                      }`}
+                    >
+                      {question}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           </div>

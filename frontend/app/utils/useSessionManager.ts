@@ -4,6 +4,31 @@ import { DEFAULT_SESSION_TITLE, generateSessionTitle, isPlaceholderTitle } from 
 import { saveSessionsToStorage, loadCurrentSessionId, saveCurrentSessionId, loadSessionsFromStorage } from './sessionStorage'
 import { fetchUserSessions, fetchSessionMessages } from './api'
 
+const dedupeSessions = (sessions: SessionSummary[]): SessionSummary[] => {
+  const sessionMap = new Map<string, SessionSummary>()
+
+  for (const session of sessions) {
+    const existing = sessionMap.get(session.id)
+    if (!existing) {
+      sessionMap.set(session.id, session)
+      continue
+    }
+
+    sessionMap.set(session.id, {
+      ...existing,
+      ...session,
+      title:
+        !isPlaceholderTitle(session.title) || isPlaceholderTitle(existing.title)
+          ? session.title
+          : existing.title,
+      hasMessages: existing.hasMessages || session.hasMessages,
+      timestamp: Math.max(existing.timestamp, session.timestamp),
+    })
+  }
+
+  return Array.from(sessionMap.values()).sort((a, b) => b.timestamp - a.timestamp)
+}
+
 export const useSessionManager = (
   userId: string | undefined,
   getToken: () => Promise<string | null>,
@@ -18,7 +43,7 @@ export const useSessionManager = (
   const persistSessions = useCallback(
     (updater: (prev: SessionSummary[]) => SessionSummary[]) => {
       setSessions(prevSessions => {
-        const updated = updater(prevSessions)
+        const updated = dedupeSessions(updater(prevSessions))
         if (userId) {
           saveSessionsToStorage(userId, updated)
         }
@@ -148,12 +173,13 @@ export const useSessionManager = (
           }
         })
 
-        setSessions(formattedSessions)
+        const dedupedSessions = dedupeSessions(formattedSessions)
+        setSessions(dedupedSessions)
         if (userId) {
-          saveSessionsToStorage(userId, formattedSessions)
+          saveSessionsToStorage(userId, dedupedSessions)
         }
 
-        return { shouldContinue: true, sessions: formattedSessions }
+        return { shouldContinue: true, sessions: dedupedSessions }
       } catch (error) {
         return { shouldContinue: false }
       }

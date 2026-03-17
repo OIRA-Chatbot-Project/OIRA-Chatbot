@@ -18,8 +18,8 @@ interface SidebarProps {
   disableNewChat?: boolean
 }
 
-const formatDate = (timestamp: string | undefined): string => {
-  if (!timestamp) return ''
+const formatDate = (timestamp: number | string | undefined): string => {
+  if (timestamp === undefined) return ''
   const date = new Date(timestamp)
   if (isNaN(date.getTime())) return ''
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
@@ -363,7 +363,6 @@ export default function Sidebar({
           </div>
           <div className="flex items-center gap-2">
             <UserButton 
-              afterSignOutUrl="/sign-in"
               appearance={{
                 elements: {
                   avatarBox: "w-8 h-8"
