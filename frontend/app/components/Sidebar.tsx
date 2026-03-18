@@ -38,7 +38,6 @@ export default function Sidebar({
   const { user } = useUser()
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [isSearchOpen, setIsSearchOpen] = useState(false)
-  const [isLinksOpen, setIsLinksOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [searchCache, setSearchCache] = useState<Record<string, { fullText: string; lowerText: string; preview: string }>>({})
   const [isSearchLoading, setIsSearchLoading] = useState(false)
@@ -482,20 +481,6 @@ export default function Sidebar({
         )}
       </div>
 
-      {/* Important Links */}
-      <div className={`px-4 pb-2 ${theme === 'dark' ? 'border-slate-800' : 'border-white/60'}`}>
-        <button
-          onClick={() => setIsLinksOpen(true)}
-          className={`w-full rounded-xl border px-3 py-2 text-xs font-semibold tracking-wide uppercase transition-colors ${
-            theme === 'dark'
-              ? 'border-slate-800 text-slate-300 hover:border-slate-600 hover:text-slate-100'
-              : 'border-white/70 text-slate-600 hover:border-gray-200 hover:text-slate-800'
-          }`}
-        >
-          Important Links
-        </button>
-      </div>
-
       {/* Footer */}
       <div
         className={`p-4 border-t text-xs ${
@@ -512,91 +497,6 @@ export default function Sidebar({
       </div>
     </div>
       {searchOverlay}
-      {isLinksOpen && isClient
-        ? createPortal(
-            <div className="fixed inset-0 z-[9998]">
-              <div
-                className="absolute inset-0 bg-black/30 backdrop-blur"
-                onClick={() => setIsLinksOpen(false)}
-                aria-hidden="true"
-              ></div>
-              <div
-                className={`absolute left-1/2 top-1/2 w-[92vw] max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-2xl border shadow-2xl ${
-                  theme === 'dark'
-                    ? 'bg-slate-900 border-slate-800 text-slate-100'
-                    : 'bg-white border-gray-200 text-slate-800'
-                }`}
-              >
-                <div className="flex items-center justify-between border-b px-4 py-3 text-sm font-semibold">
-                  <span>Important Links & Files</span>
-                  <button
-                    onClick={() => setIsLinksOpen(false)}
-                    className={`rounded-lg px-2 py-1 text-xs ${
-                      theme === 'dark'
-                        ? 'text-slate-400 hover:text-slate-100 hover:bg-slate-800'
-                        : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
-                    }`}
-                  >
-                    Close
-                  </button>
-                </div>
-                <div className="px-4 py-3 space-y-4 text-sm">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Links</p>
-                    <ul className="mt-2 space-y-2">
-                      <li>
-                        <a
-                          href="https://pubapps.bucknell.edu/CourseInformation/#/lookup"
-                          target="_blank"
-                          rel="noreferrer"
-                          className="underline underline-offset-2 hover:text-primary"
-                        >
-                          Course Information Page (Public)
-                        </a>
-                      </li>
-                      <li>
-                        <a
-                          href="https://banner.ban.bucknell.edu/StudentRegistrationSsb/ssb/registration/registration"
-                          target="_blank"
-                          rel="noreferrer"
-                          className="underline underline-offset-2 hover:text-primary"
-                        >
-                          Course Registration (Banner Self Service)
-                        </a>
-                      </li>
-                      <li>
-                        <a
-                          href="https://banner.ban.bucknell.edu/BannerExtensibility/customPage/page/BucknellAPR?type=STUD"
-                          target="_blank"
-                          rel="noreferrer"
-                          className="underline underline-offset-2 hover:text-primary"
-                        >
-                          Academic Progress Report
-                        </a>
-                      </li>
-                    </ul>
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Files</p>
-                    <ul className="mt-2 space-y-2">
-                      <li>
-                        <a
-                          href="https://drive.google.com/file/d/1gaUCs_WZl0jLeS41y6cCVwHXiLeeejDA/view?usp=sharing"
-                          target="_blank"
-                          rel="noreferrer"
-                          className="underline underline-offset-2 hover:text-primary"
-                        >
-                          Course Catalog (PDF)
-                        </a>
-                      </li>
-                    </ul>
-                  </div>
-                </div>
-              </div>
-            </div>,
-            document.body
-          )
-        : null}
       {isClient && openMenuSessionId && menuPosition
         ? createPortal(
             (() => {

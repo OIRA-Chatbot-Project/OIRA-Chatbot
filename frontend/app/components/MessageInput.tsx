@@ -1,16 +1,42 @@
 'use client'
 
-import { useState, KeyboardEvent } from 'react'
+import { useState, KeyboardEvent, useEffect, useRef } from 'react'
 import { Theme } from '../types'
 
 interface MessageInputProps {
   onSend: (message: string) => void
+  onUploadSchedule?: () => void
+  onOpenImportantLinks?: () => void
+  isUploadingSchedule?: boolean
   disabled?: boolean
   theme?: Theme
 }
 
-export default function MessageInput({ onSend, disabled, theme = 'light' }: MessageInputProps) {
+export default function MessageInput({
+  onSend,
+  onUploadSchedule,
+  onOpenImportantLinks,
+  isUploadingSchedule = false,
+  disabled,
+  theme = 'light',
+}: MessageInputProps) {
   const [input, setInput] = useState('')
+  const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!isMenuOpen) return
+
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node
+      if (menuRef.current && !menuRef.current.contains(target)) {
+        setIsMenuOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [isMenuOpen])
 
   const handleSend = () => {
     if (input.trim() && !disabled) {
@@ -34,6 +60,62 @@ export default function MessageInput({ onSend, disabled, theme = 'light' }: Mess
           : 'bg-white/90 border-white/80 shadow-inner shadow-white/40'
       }`}
     >
+      <div ref={menuRef} className="relative flex-shrink-0">
+        <button
+          type="button"
+          onClick={() => setIsMenuOpen(prev => !prev)}
+          className={`flex h-11 w-11 items-center justify-center rounded-2xl border transition-colors ${
+            theme === 'dark'
+              ? 'border-slate-700 bg-slate-950/50 text-gray-100 hover:border-slate-500'
+              : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300 hover:bg-slate-50'
+          }`}
+          title="More actions"
+          aria-label="More actions"
+        >
+          <span className="material-symbols-outlined text-[20px]">add</span>
+        </button>
+        {isMenuOpen && (
+          <div
+            className={`absolute bottom-14 left-0 z-20 w-56 rounded-2xl border p-2 shadow-xl ${
+              theme === 'dark'
+                ? 'border-slate-700 bg-slate-900 text-gray-100'
+                : 'border-gray-200 bg-white text-gray-800'
+            }`}
+          >
+            <button
+              type="button"
+              onClick={() => {
+                setIsMenuOpen(false)
+                onUploadSchedule?.()
+              }}
+              disabled={isUploadingSchedule}
+              className={`flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm transition-colors ${
+                isUploadingSchedule
+                  ? 'cursor-not-allowed opacity-60'
+                  : theme === 'dark'
+                    ? 'hover:bg-slate-800'
+                    : 'hover:bg-slate-50'
+              }`}
+            >
+              <span className="material-symbols-outlined text-[18px]">upload_file</span>
+              <span>{isUploadingSchedule ? 'Uploading…' : 'Upload Schedule'}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setIsMenuOpen(false)
+                onOpenImportantLinks?.()
+              }}
+              className={`flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm transition-colors ${
+                theme === 'dark' ? 'hover:bg-slate-800' : 'hover:bg-slate-50'
+              }`}
+            >
+              <span className="material-symbols-outlined text-[18px]">link</span>
+              <span>Important Links</span>
+            </button>
+          </div>
+        )}
+      </div>
       <textarea
         value={input}
         onChange={(e) => setInput(e.target.value)}
