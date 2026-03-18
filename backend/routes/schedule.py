@@ -1,3 +1,9 @@
+"""
+Schedule processing routes.
+
+This module provides API endpoints for uploading and processing student schedules,
+extracting course information, and generating recommendations.
+"""
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.orm import Session
 import re
@@ -20,9 +26,22 @@ async def upload_schedule(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """
-    Accept a screenshot/text export of a student's past schedule, extract the courses,
-    and provide tailored recommendations.
+    """Process a student's schedule upload and provide course recommendations.
+
+    Accepts a screenshot or text export of a student's past schedule, extracts the courses,
+    and provides tailored recommendations based on the Bucknell course catalog.
+
+    Args:
+        session_id: The ID of the session.
+        file: The uploaded file (image or text).
+        current_user: The authenticated user information.
+        db: The database session.
+
+    Returns:
+        ScheduleUploadResponse: The extracted schedule summary, parsed courses, and AI recommendations.
+
+    Raises:
+        HTTPException: If the user/session is invalid, the file is empty, or parsing fails.
     """
     try:
         # Get user ID from token

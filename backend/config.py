@@ -1,3 +1,9 @@
+"""
+Configuration settings for the OIRA Chatbot API.
+
+This module loads environment variables and defines constants used throughout the application,
+including database URLs, OpenAI API keys, RAG configuration, and other application settings.
+"""
 import os
 from dotenv import load_dotenv
 

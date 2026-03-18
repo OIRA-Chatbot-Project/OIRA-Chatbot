@@ -1,3 +1,9 @@
+"""
+Utilities for loading and processing Google Docs.
+
+This module handles fetching Google Docs via their export URLs, converting
+them to Markdown, and caching them locally.
+"""
 import csv
 import os
 import re
@@ -15,6 +21,14 @@ _GDOC_ID_RE = re.compile(r"/d/([a-zA-Z0-9_-]+)")
 
 
 def _extract_gdoc_id(url: str) -> Optional[str]:
+    """Extract the Google Doc ID from a URL.
+
+    Args:
+        url: The Google Doc URL.
+
+    Returns:
+        Optional[str]: The extracted document ID, or None if not found.
+    """
     match = _GDOC_ID_RE.search(url or "")
     if match:
         return match.group(1)
@@ -28,6 +42,14 @@ def _extract_gdoc_id(url: str) -> Optional[str]:
 
 
 def _to_export_url(url: str) -> Optional[str]:
+    """Convert a Google Doc URL to an export URL (HTML format).
+
+    Args:
+        url: The Google Doc URL.
+
+    Returns:
+        Optional[str]: The export URL, or None if the ID could not be extracted.
+    """
     doc_id = _extract_gdoc_id(url)
     if not doc_id:
         return None
@@ -35,6 +57,14 @@ def _to_export_url(url: str) -> Optional[str]:
 
 
 def _read_google_docs_csv(path: str) -> List[Dict[str, str]]:
+    """Read the Google Docs CSV file.
+
+    Args:
+        path: Path to the CSV file.
+
+    Returns:
+        List[Dict[str, str]]: A list of dictionaries representing the CSV rows.
+    """
     if not os.path.exists(path):
         return []
 
@@ -64,12 +94,33 @@ def _read_google_docs_csv(path: str) -> List[Dict[str, str]]:
 
 
 def _normalize_markdown(text: str) -> str:
+    """Normalize the generated Markdown text.
+
+    Args:
+        text: The raw Markdown text.
+
+    Returns:
+        str: The normalized Markdown text.
+    """
     text = re.sub(r"\n{3,}", "\n\n", text)
     text = re.sub(r"[ \t]{2,}", " ", text)
     return text.strip()
 
 
 def _fetch_google_doc_markdown(url: str, timeout: int = 30) -> str:
+    """Fetch a Google Doc and convert it to Markdown.
+
+    Args:
+        url: The Google Doc URL.
+        timeout: Request timeout in seconds.
+
+    Returns:
+        str: The converted Markdown content.
+
+    Raises:
+        ValueError: If the document ID cannot be extracted.
+        requests.RequestException: If the network request fails.
+    """
     export_url = _to_export_url(url)
     if not export_url:
         raise ValueError("Could not parse Google Docs document ID from URL")
@@ -83,6 +134,14 @@ def _fetch_google_doc_markdown(url: str, timeout: int = 30) -> str:
 
 
 def load_google_docs() -> List[Document]:
+    """Load Google Docs defined in the configuration CSV.
+
+    Reads the CSV file specified in config.GOOGLE_DOCS_CSV, fetches the
+    documents (using cache if available), and returns them as LangChain Documents.
+
+    Returns:
+        List[Document]: A list of loaded documents.
+    """
     entries = _read_google_docs_csv(config.GOOGLE_DOCS_CSV)
     if not entries:
         return []

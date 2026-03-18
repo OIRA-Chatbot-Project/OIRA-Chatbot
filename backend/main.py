@@ -1,3 +1,9 @@
+"""
+Main application entry point for the OIRA Chatbot API.
+
+This module initializes the FastAPI application, sets up middleware (CORS),
+configures database initialization on startup, and includes all application routers.
+"""
 import sys
 import os
 
@@ -39,14 +45,22 @@ app.add_middleware(
 # Initialize database on startup
 @app.on_event("startup")
 async def startup_event():
-    """Initialize database tables on startup"""
+    """Initialize database tables on startup.
+
+    This function is called when the application starts. It triggers the
+    creation of all database tables defined in the SQLAlchemy models.
+    """
     init_db()
     print("Database initialized successfully")
 
 
 @app.get("/", response_model=HealthResponse)
 async def root():
-    """Health check endpoint"""
+    """Health check endpoint.
+
+    Returns:
+        HealthResponse: A response object containing the status and version of the API.
+    """
     return HealthResponse(
         status="healthy",
         version=config.API_VERSION

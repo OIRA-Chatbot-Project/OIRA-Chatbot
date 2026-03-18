@@ -1,5 +1,8 @@
 """
-Authentication utilities for Clerk JWT verification
+Authentication utilities for Clerk JWT verification.
+
+This module provides functions to verify Clerk JWT tokens, fetch JWKS,
+and retrieve the current authenticated user.
 """
 import jwt
 import requests
@@ -25,7 +28,11 @@ else:
 
 @lru_cache()
 def get_clerk_jwks():
-    """Fetch Clerk's JWKS (JSON Web Key Set) for token verification"""
+    """Fetch Clerk's JWKS (JSON Web Key Set) for token verification.
+
+    Returns:
+        dict: The JSON Web Key Set from Clerk, or None if the request fails.
+    """
     try:
         # Clerk's JWKS endpoint
         jwks_url = f"{CLERK_ISSUER}/.well-known/jwks.json"
@@ -38,17 +45,16 @@ def get_clerk_jwks():
 
 
 def verify_clerk_token(token: str) -> dict:
-    """
-    Verify Clerk JWT token and return decoded payload
-    
+    """Verify Clerk JWT token and return decoded payload.
+
     Args:
-        token: JWT token from Clerk
-        
+        token (str): JWT token from Clerk.
+
     Returns:
-        dict: Decoded token payload containing user information
-        
+        dict: Decoded token payload containing user information.
+
     Raises:
-        HTTPException: If token is invalid or verification fails
+        HTTPException: If token is invalid or verification fails.
     """
     try:
         # For development: If using secret key directly
@@ -101,11 +107,16 @@ def verify_clerk_token(token: str) -> dict:
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Security(security)
 ) -> dict:
-    """
-    FastAPI dependency to get current authenticated user from JWT token
-    
+    """FastAPI dependency to get current authenticated user from JWT token.
+
+    Args:
+        credentials (HTTPAuthorizationCredentials): The bearer token credentials.
+
     Returns:
-        dict: User information from token including clerk_user_id (as 'sub')
+        dict: User information from token including clerk_user_id (as 'sub').
+
+    Raises:
+        HTTPException: If the token is invalid or missing user ID.
     """
     token = credentials.credentials
     user_data = verify_clerk_token(token)
@@ -118,13 +129,12 @@ async def get_current_user(
 
 
 def get_user_id_from_token(user_data: dict) -> str:
-    """
-    Extract Clerk user ID from decoded token
-    
+    """Extract Clerk user ID from decoded token.
+
     Args:
-        user_data: Decoded JWT token payload
-        
+        user_data (dict): Decoded JWT token payload.
+
     Returns:
-        str: Clerk user ID
+        str: Clerk user ID.
     """
     return user_data.get("sub")

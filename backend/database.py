@@ -1,3 +1,10 @@
+"""
+Database configuration and session management.
+
+This module sets up the SQLAlchemy engine, session factory, and base model class.
+It also provides utility functions for initializing the database and retrieving
+database sessions.
+"""
 from sqlalchemy import create_engine, Column, String, Integer, DateTime, Text, Float, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
@@ -89,13 +96,20 @@ class Feedback(Base):
 
 # Create all tables
 def init_db():
-    """Initialize database tables"""
+    """Initialize database tables.
+
+    Creates all tables defined in the SQLAlchemy models if they do not already exist.
+    """
     Base.metadata.create_all(bind=engine)
 
 
 # Dependency to get DB session
 def get_db():
-    """Get database session for FastAPI dependency injection"""
+    """Get a database session.
+
+    Yields:
+        Session: A SQLAlchemy database session.
+    """
     db = SessionLocal()
     try:
         yield db

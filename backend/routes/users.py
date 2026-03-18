@@ -1,3 +1,8 @@
+"""
+User management routes.
+
+This module provides API endpoints for creating and retrieving user information.
+"""
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from datetime import datetime
@@ -15,12 +20,23 @@ async def create_or_get_user(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """
-    Create a new user or retrieve existing user
+    """Create a new user or retrieve an existing user.
     
-    - Checks if user already exists by clerk_user_id
-    - Creates new user if doesn't exist
-    - Returns user information
+    This endpoint checks if a user already exists based on their Clerk user ID.
+    If the user exists, their information is updated. If not, a new user record
+    is created.
+
+    Args:
+        user_data: The user data including Clerk ID, email, and name.
+        current_user: The authenticated user information.
+        db: The database session.
+
+    Returns:
+        UserResponse: The user information.
+
+    Raises:
+        HTTPException: If the authenticated user ID doesn't match the request,
+        or if an error occurs during processing.
     """
     try:
         # Verify the user making request matches the user being created
