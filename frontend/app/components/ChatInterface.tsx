@@ -9,6 +9,7 @@ import { Message, Theme, ScheduleUploadResponse } from '../types'
 import { API_URL } from '../utils/config'
 import { generateSessionTitle } from '../utils/session'
 
+/** Pre-written example questions grouped by topic, used to populate the empty-session prompt panel. */
 const SUGGESTED_QUESTION_GROUPS = {
   planning: [
     'What courses should I take for a Computer Science major?',
@@ -51,6 +52,12 @@ const SUGGESTED_QUESTION_GROUPS = {
   ],
 } as const
 
+/**
+ * Returns a new array with the same elements in a random order (Fisher-Yates shuffle).
+ *
+ * @param items - The array to shuffle. The original array is not mutated.
+ * @returns A new shuffled array.
+ */
 const shuffle = <T,>(items: T[]): T[] => {
   const next = [...items]
   for (let i = next.length - 1; i > 0; i -= 1) {
@@ -60,6 +67,12 @@ const shuffle = <T,>(items: T[]): T[] => {
   return next
 }
 
+/**
+ * Builds a shuffled list of suggested questions by picking one random question from
+ * each category in `SUGGESTED_QUESTION_GROUPS`, then shuffling the category order.
+ *
+ * @returns An array of question strings, one per category, in random order.
+ */
 const buildSuggestedQuestions = () => {
   return shuffle(Object.values(SUGGESTED_QUESTION_GROUPS).map(group => {
     const [question] = shuffle([...group])
@@ -75,6 +88,18 @@ interface ChatInterfaceProps {
   onToggleTheme: () => void
 }
 
+/**
+ * Main chat interface component managing the full conversation lifecycle.
+ *
+ * Responsibilities:
+ * - Loading and displaying conversation history for the active session.
+ * - Sending user messages via streaming SSE (`/chat/stream`) or non-streaming (`/chat`).
+ * - Progressively rendering streaming tokens into a placeholder message bubble.
+ * - Regenerating assistant responses and supporting inline message editing.
+ * - Submitting thumbs up/down feedback.
+ * - Handling schedule file uploads and displaying parsed course information.
+ * - Notifying the parent of session title updates and first-message events.
+ */
 export default function ChatInterface({
   sessionId,
   onSessionTitleUpdate,
@@ -110,6 +135,13 @@ export default function ChatInterface({
   const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>(() => buildSuggestedQuestions())
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  /**
+   * Filters a message array to remove duplicate entries, keeping the first occurrence
+   * of each message ID.
+   *
+   * @param items - The message array, potentially containing duplicates.
+   * @returns A new array with duplicates removed.
+   */
   const dedupeMessagesById = (items: Message[]) => {
     const seen = new Set<string>()
     return items.filter((item) => {
@@ -142,6 +174,7 @@ export default function ChatInterface({
     }
   }, [messages])
 
+  /** Returns `true` if the message scroll container is within 120 px of its bottom edge. */
   const isNearBottom = () => {
     const container = messageScrollRef.current
     if (!container) return true
@@ -152,21 +185,34 @@ export default function ChatInterface({
     return distanceFromBottom <= 120
   }
 
+  /** Scroll event handler — updates `shouldAutoScrollRef` and shows/hides the jump-to-latest button. */
   const handleMessagesScroll = () => {
     const nearBottom = isNearBottom()
     shouldAutoScrollRef.current = nearBottom
     setShowJumpToLatest(!nearBottom && messages.length > 0)
   }
 
+  /** Re-enables automatic scrolling and hides the jump-to-latest button. */
   const enableAutoScroll = () => {
     shouldAutoScrollRef.current = true
     setShowJumpToLatest(false)
   }
 
+  /**
+   * Scrolls the message list to the bottom sentinel element.
+   *
+   * @param behavior - The scroll animation style (`'smooth'` by default, `'auto'` for instant).
+   */
   const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
     messagesEndRef.current?.scrollIntoView({ behavior })
   }
 
+  /**
+   * Fetches and renders the full message history for the current session.
+   *
+   * Also notifies the parent of any existing session title derived from the first
+   * user message, and marks the session as having messages when history is non-empty.
+   */
   const loadConversationHistory = async () => {
     try {
       const token = await getToken()
@@ -204,6 +250,14 @@ export default function ChatInterface({
     }
   }
 
+  /**
+   * Requests an AI-generated session title from the backend and forwards it to the parent.
+   *
+   * Falls back to `generateSessionTitle` (a local heuristic) if the backend call fails
+   * or returns an error response.
+   *
+   * @param content - The text of the first user message used as the title source.
+   */
   const notifySessionTitle = async (content: string) => {
     if (!content) return
     
@@ -242,6 +296,26 @@ export default function ChatInterface({
 
   const ENABLE_STREAMING = true
 
+  /**
+   * Consumes a Server-Sent Events stream from the backend and progressively updates
+   * the in-progress assistant message placeholder.
+   *
+   * Handled event types:
+   * - `metadata` — sets citations on the placeholder.
+   * - `user` — swaps the temporary user message ID for the real DB ID.
+   * - `token` — appends the token string to the placeholder's content.
+   * - `followups` — attaches follow-up question suggestions.
+   * - `saved` — swaps the placeholder assistant ID for the real DB ID.
+   * - `error` — throws so the caller can surface the failure.
+   * - `done` — marks the stream as complete (no state change needed).
+   *
+   * @param url - The streaming endpoint URL.
+   * @param body - JSON-serializable request body.
+   * @param placeholderId - The temporary ID of the assistant message placeholder.
+   * @param token - A valid Clerk JWT.
+   * @param userPlaceholderId - Optional temporary ID of the user message placeholder,
+   *   used to apply the real ID returned via the `user` event.
+   */
   const streamAssistantMessage = async (
     url: string,
     body: Record<string, unknown>,
@@ -374,6 +448,17 @@ export default function ChatInterface({
     setAnimateMessageId(undefined)
   }
 
+  /**
+   * Sends a message using the non-streaming `/chat` endpoint and appends the full
+   * assistant response once the request completes.
+   *
+   * Used as a fallback when `ENABLE_STREAMING` is false.
+   *
+   * @param content - The user's message text.
+   * @param token - A valid Clerk JWT.
+   * @param isFirstMessage - Whether this is the first user message in the session.
+   * @param userPlaceholderId - The temporary ID assigned to the user message placeholder.
+   */
   const sendMessageNonStreaming = async (content: string, token: string, isFirstMessage: boolean, userPlaceholderId: number) => {
     const response = await fetch(`${API_URL}/chat`, {
       method: 'POST',
@@ -430,6 +515,15 @@ export default function ChatInterface({
     }
   }
 
+  /**
+   * Main message submission handler.
+   *
+   * Optimistically appends the user message to the UI, then either opens an SSE stream
+   * (streaming mode) or awaits the full response (non-streaming mode). Updates session
+   * state on the first message of a session.
+   *
+   * @param content - The trimmed user message text.
+   */
   const sendMessage = async (content: string) => {
     enableAutoScroll()
 
@@ -503,6 +597,16 @@ export default function ChatInterface({
     }
   }
 
+  /**
+   * Submits a thumbs up/down rating (and optional note) for an assistant message.
+   *
+   * On success, updates the local message state to reflect the submitted feedback
+   * so the feedback controls are hidden and the indicator is shown.
+   *
+   * @param messageId - The DB ID of the message being rated.
+   * @param rating - `1` for thumbs up, `-1` for thumbs down.
+   * @param note - Optional free-text elaboration (used for thumbs-down reports).
+   */
   const submitFeedback = async (messageId: number, rating: number, note?: string) => {
     try {
       const token = await getToken()
@@ -540,6 +644,14 @@ export default function ChatInterface({
     }
   }
 
+  /**
+   * Removes all messages with an ID greater than `messageId` from local state.
+   *
+   * Used before regenerating a response to clear the stale assistant reply and any
+   * messages that follow it.
+   *
+   * @param messageId - The ID of the anchor message to preserve (inclusive).
+   */
   const removeMessagesAfter = (messageId: number) => {
     setMessages(prev => prev.filter(msg => msg.id <= messageId))
     setSeenMessageIds(prev => {
@@ -551,6 +663,16 @@ export default function ChatInterface({
     })
   }
 
+  /**
+   * Regenerates the assistant response for a given user message.
+   *
+   * Removes all messages after `userMessageId`, inserts a new streaming placeholder,
+   * and calls the `/chat/regenerate/stream` endpoint.
+   *
+   * @param userMessageId - The DB ID of the user message to regenerate a response for.
+   * @param options.skipLoading - When `true`, skips setting `isRegenerating` to `true`
+   *   (used when called from `editQuestionAndRegenerate` which manages its own loading state).
+   */
   const regenerateAnswer = async (userMessageId: number, options?: { skipLoading?: boolean }) => {
     enableAutoScroll()
     const skipLoading = options?.skipLoading === true
@@ -597,6 +719,16 @@ export default function ChatInterface({
     }
   }
 
+  /**
+   * Updates the content of a user message and regenerates the assistant response.
+   *
+   * Sends a PATCH to `/messages/edit` which returns the IDs of any downstream messages
+   * that were deleted server-side. The local state is updated to reflect both the new
+   * content and the deletions before streaming begins.
+   *
+   * @param messageId - The DB ID of the user message to edit.
+   * @param content - The new message content (must be non-empty after trimming).
+   */
   const editQuestionAndRegenerate = async (messageId: number, content: string) => {
     if (!content.trim()) return
     setIsRegenerating(true)
@@ -654,11 +786,21 @@ export default function ChatInterface({
     }
   }
 
+  /** Programmatically opens the hidden file input dialog to start a schedule upload. No-ops while an upload is in progress. */
   const triggerScheduleUpload = () => {
     if (isUploadingSchedule) return
     fileInputRef.current?.click()
   }
 
+  /**
+   * Handles a schedule file selected via the hidden file input.
+   *
+   * Uploads the file to `/schedule/upload`, then appends both a user-side schedule
+   * summary message and the assistant's parsed-courses response to the conversation.
+   * Sets `uploadError` with a user-friendly message on failure.
+   *
+   * @param event - The `change` event fired by the file input element.
+   */
   const handleScheduleUpload = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) return

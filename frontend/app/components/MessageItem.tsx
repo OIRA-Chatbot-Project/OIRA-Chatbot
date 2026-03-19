@@ -26,6 +26,18 @@ const THINKING_MESSAGES = [
   'Almost there...',
 ]
 
+/**
+ * Renders a single chat message bubble for either the user or the assistant.
+ *
+ * Assistant messages support:
+ * - Character-by-character streaming animation while `animate` is true.
+ * - A cycling "Thinking…" status while content is empty.
+ * - Collapsible citations and suggested follow-up questions.
+ * - Copy-to-clipboard, thumbs up/down feedback, and a flag report flow.
+ *
+ * User messages support inline editing (shown only on the last user message)
+ * which calls `onEditQuestion` to update the message and regenerate the response.
+ */
 export default function MessageItem({
   message,
   onFeedback,
@@ -128,6 +140,7 @@ export default function MessageItem({
     setIsEditing(false)
   }, [message.id, message.content])
 
+  /** Routes a feedback rating: shows a note input for thumbs-down, submits immediately for thumbs-up. */
   const handleFeedback = (rating: number) => {
     if (rating === -1) {
       setPendingRating(rating)
@@ -137,6 +150,7 @@ export default function MessageItem({
     }
   }
 
+  /** Submits the pending thumbs-down rating together with the optional free-text note. */
   const submitFeedbackWithNote = () => {
     if (pendingRating !== null) {
       onFeedback(message.id, pendingRating, feedbackNote || undefined)
@@ -146,12 +160,22 @@ export default function MessageItem({
     }
   }
 
+  /** Dismisses the thumbs-down note input and clears all pending feedback state. */
   const cancelFeedbackNote = () => {
     setShowFeedbackNote(false)
     setFeedbackNote('')
     setPendingRating(null)
   }
 
+  /**
+   * Strips markdown syntax from a string, leaving only plain readable text.
+   *
+   * Removes bold, italic, headers, links, fenced and inline code blocks,
+   * horizontal rules, blockquotes, and list markers.
+   *
+   * @param markdown - Raw markdown string to clean.
+   * @returns Plain text with whitespace normalized and leading/trailing space removed.
+   */
   const stripMarkdown = (markdown: string): string => {
     return markdown
       // Remove bold (**text** -> text)
@@ -180,6 +204,13 @@ export default function MessageItem({
       .trim()
   }
 
+  /**
+   * Copies the message content to the clipboard as both rich HTML and plain text.
+   *
+   * Uses the rendered HTML from `markdownContentRef` for the `text/html` MIME type so
+   * that pastes into rich-text editors preserve formatting. Falls back to plain text
+   * via `navigator.clipboard.writeText` if the ref is unavailable or the write fails.
+   */
   const copyToClipboard = async () => {
     try {
       if (markdownContentRef.current) {
@@ -208,6 +239,13 @@ export default function MessageItem({
     }
   }
 
+  /**
+   * Submits a flag report by forwarding the selected reason and optional comment as
+   * the feedback note, then resets the flag UI state.
+   *
+   * @param reason - A pre-set category label (e.g., "Wrong information").
+   * @param note - An optional free-text elaboration provided by the user.
+   */
   const handleFlagSubmit = (reason: string, note?: string) => {
     onFeedback(message.id, -1, `${reason}${note ? `: ${note}` : ''}`)
     setShowFlagFeedback(false)
@@ -219,6 +257,7 @@ export default function MessageItem({
     setCitationsOpen(false)
   }, [message.id])
 
+  /** Toggles the flag report panel open or closed, resetting its fields when closing. */
   const toggleFlagFeedback = () => {
     setShowFlagFeedback(prev => {
       const next = !prev

@@ -15,6 +15,18 @@ import {
 import { initializeUserInBackend, deleteSession as deleteSessionApi, updateSession as updateSessionApi } from "./utils/api";
 import { useSessionManager } from "./utils/useSessionManager";
 
+/**
+ * Root page component — the application shell.
+ *
+ * Orchestrates authentication, user initialization, session lifecycle, and theme
+ * persistence. Renders the `Sidebar` and `ChatInterface` once the user is signed in
+ * and the backend user record has been created/verified.
+ *
+ * Session initialization strategy:
+ * - First tab access → create a new temporary session.
+ * - Page reload → restore the last active session from localStorage.
+ * - No existing sessions → create a new temporary session.
+ */
 export default function Home() {
   const { getToken, isLoaded, isSignedIn } = useAuth();
   const { user } = useUser();
@@ -62,6 +74,7 @@ export default function Home() {
     localStorage.setItem("theme", theme);
   }, [theme]);
 
+  /** Toggles between light and dark theme. The new value is persisted to localStorage via a `useEffect`. */
   const toggleTheme = useCallback(() => {
     setTheme((prev) => (prev === "light" ? "dark" : "light"));
   }, []);
@@ -78,6 +91,12 @@ export default function Home() {
     setIsCurrentSessionEmpty(current ? !current.hasMessages : false);
   }, [sessionId, sessions, isTemporarySession]);
 
+  /**
+   * Creates a new temporary session with a fresh UUID and marks it as active.
+   *
+   * The session is not added to the sessions list until the user sends their first
+   * message (`markSessionHasMessages` promotes it at that point).
+   */
   const startNewChat = useCallback(() => {
     if (isCreatingSession) return;
 
@@ -101,6 +120,13 @@ export default function Home() {
     setIsCreatingSession,
   ]);
 
+  /**
+   * Deletes a session from the backend and removes it from local state.
+   *
+   * If the deleted session is the currently active one, starts a new temporary chat.
+   *
+   * @param id - The UUID of the session to delete.
+   */
   const deleteSession = useCallback(
     async (id: string) => {
       try {
@@ -128,6 +154,12 @@ export default function Home() {
     [persistSessions, sessionId, startNewChat, getToken]
   );
 
+  /**
+   * Persists a new title for a session both in the backend and in local state.
+   *
+   * @param id - The UUID of the session to rename.
+   * @param title - The new title string.
+   */
   const renameSession = useCallback(
     async (id: string, title: string) => {
       try {

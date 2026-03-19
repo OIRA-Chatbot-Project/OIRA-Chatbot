@@ -12,6 +12,12 @@ interface MessageInputProps {
   theme?: Theme
 }
 
+/**
+ * Controlled text input for composing and sending chat messages.
+ *
+ * Features an auto-expanding textarea, a `+` action menu for schedule uploads and
+ * important links, and a Send button. Submits on Enter (Shift+Enter for newlines).
+ */
 export default function MessageInput({
   onSend,
   onUploadSchedule,
@@ -38,6 +44,7 @@ export default function MessageInput({
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [isMenuOpen])
 
+  /** Trims the current input and invokes `onSend` if the input is non-empty and not disabled. */
   const handleSend = () => {
     if (input.trim() && !disabled) {
       onSend(input.trim())
@@ -45,6 +52,7 @@ export default function MessageInput({
     }
   }
 
+  /** Intercepts Enter to trigger send; allows Shift+Enter to insert a newline instead. */
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()

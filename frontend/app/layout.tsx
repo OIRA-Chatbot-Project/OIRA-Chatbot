@@ -10,6 +10,12 @@ export const metadata: Metadata = {
   description: "AI-powered assistant for Bucknell University course catalog",
 };
 
+/**
+ * Root layout wrapping every page in the application.
+ *
+ * Provides the Clerk authentication context via `ClerkProvider` and loads the
+ * Material Symbols Outlined icon font for use throughout the UI.
+ */
 export default function RootLayout({
   children,
 }: {

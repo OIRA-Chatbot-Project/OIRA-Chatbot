@@ -2,6 +2,12 @@
 
 import { useEffect } from "react";
 
+/**
+ * Global Next.js error boundary component rendered when an unhandled runtime error occurs.
+ *
+ * Logs the error to the console and presents a user-friendly message with a retry button
+ * that calls `reset` to attempt re-rendering the failed segment.
+ */
 export default function Error({
   error,
   reset,

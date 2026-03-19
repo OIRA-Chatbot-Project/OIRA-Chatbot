@@ -18,6 +18,12 @@ interface SidebarProps {
   disableNewChat?: boolean
 }
 
+/**
+ * Formats a timestamp as a short, locale-aware date string (e.g., "Jan 15, 2024").
+ *
+ * @param timestamp - A Unix millisecond timestamp, ISO date string, or `undefined`.
+ * @returns A formatted date string, or an empty string for missing/invalid input.
+ */
 const formatDate = (timestamp: number | string | undefined): string => {
   if (timestamp === undefined) return ''
   const date = new Date(timestamp)
@@ -25,6 +31,13 @@ const formatDate = (timestamp: number | string | undefined): string => {
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
+/**
+ * Left navigation panel for the chat application.
+ *
+ * Displays the session history list with per-session rename/delete menus, a new-chat
+ * button, a full-text search overlay (with lazy indexing), and a collapsible icon-only
+ * mode. The search panel is portalled to `document.body` so it renders above all content.
+ */
 export default function Sidebar({
   sessions,
   currentSessionId,
@@ -133,6 +146,17 @@ export default function Sidebar({
 
   const normalizedQuery = searchQuery.trim().toLowerCase()
 
+  /**
+   * Returns a context-aware preview snippet for a session in the search panel.
+   *
+   * When a search query is active it extracts a ±60-character window around the first
+   * match in the full conversation text. Falls back to the last message preview when
+   * there is no query or no match. Returns an indexing placeholder while the session
+   * is still being fetched.
+   *
+   * @param sessionId - The ID of the session to generate a snippet for.
+   * @returns A short preview string, possibly prefixed/suffixed with `…`.
+   */
   const getSnippet = (sessionId: string) => {
     const entry = searchCache[sessionId]
     if (!entry) {
@@ -170,6 +194,7 @@ export default function Sidebar({
       })
     : sessions.slice(0, 6)
 
+  /** Closes the search overlay and resets all search state (query, loading, error). */
   const closeSearch = () => {
     setIsSearchOpen(false)
     setSearchQuery('')
@@ -177,6 +202,12 @@ export default function Sidebar({
     setSearchError(null)
   }
 
+  /**
+   * Switches to the selected session, closes the search overlay, and expands the sidebar
+   * if it was collapsed.
+   *
+   * @param id - The session ID to activate.
+   */
   const handleSearchSessionClick = (id: string) => {
     onSelectSession(id)
     closeSearch()

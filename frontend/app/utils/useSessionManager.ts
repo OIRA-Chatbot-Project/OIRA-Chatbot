@@ -4,6 +4,19 @@ import { DEFAULT_SESSION_TITLE, generateSessionTitle, isPlaceholderTitle } from 
 import { saveSessionsToStorage, loadCurrentSessionId, saveCurrentSessionId, loadSessionsFromStorage } from './sessionStorage'
 import { fetchUserSessions, fetchSessionMessages } from './api'
 
+/**
+ * Deduplicates a session list by ID, merging duplicate entries.
+ *
+ * When two entries share the same ID the merge strategy is:
+ * - Keep whichever title is non-placeholder; fall back to the incoming entry's title.
+ * - Set `hasMessages` to `true` if either entry has messages.
+ * - Use the larger of the two timestamps.
+ *
+ * Returns the deduplicated list sorted by timestamp descending (most recent first).
+ *
+ * @param sessions - A flat array of sessions that may contain duplicates.
+ * @returns A deduplicated, sorted array of `SessionSummary` objects.
+ */
 const dedupeSessions = (sessions: SessionSummary[]): SessionSummary[] => {
   const sessionMap = new Map<string, SessionSummary>()
 
@@ -29,6 +42,18 @@ const dedupeSessions = (sessions: SessionSummary[]): SessionSummary[] => {
   return Array.from(sessionMap.values()).sort((a, b) => b.timestamp - a.timestamp)
 }
 
+/**
+ * Manages the full lifecycle of chat sessions for the authenticated user.
+ *
+ * Handles session creation, switching, renaming, deletion, persistence to localStorage,
+ * hydration of session titles from the backend, and initial load from the backend.
+ *
+ * @param userId - The Clerk user ID, or `undefined` while auth is loading.
+ * @param getToken - Async function that resolves to a Clerk JWT, or `null` if unavailable.
+ * @param isLoaded - Whether the Clerk auth state has finished loading.
+ * @param isSignedIn - Whether the user is currently signed in.
+ * @returns An object containing session state and callbacks for all session operations.
+ */
 export const useSessionManager = (
   userId: string | undefined,
   getToken: () => Promise<string | null>,
@@ -40,6 +65,10 @@ export const useSessionManager = (
   const [isCreatingSession, setIsCreatingSession] = useState(false)
   const [isTemporarySession, setIsTemporarySession] = useState(false)
 
+  /**
+   * Applies an updater function to the session list, deduplicates the result,
+   * and persists it to localStorage.
+   */
   const persistSessions = useCallback(
     (updater: (prev: SessionSummary[]) => SessionSummary[]) => {
       setSessions(prevSessions => {
@@ -53,6 +82,10 @@ export const useSessionManager = (
     [userId]
   )
 
+  /**
+   * Replaces the title of a session only if it currently holds a placeholder title.
+   * No-ops if the new title is itself a placeholder.
+   */
   const updateSessionTitle = useCallback(
     (id: string, newTitle: string) => {
       if (!newTitle || isPlaceholderTitle(newTitle)) return
@@ -69,6 +102,10 @@ export const useSessionManager = (
     [persistSessions]
   )
 
+  /**
+   * Unconditionally renames a session title (used for user-initiated rename actions).
+   * No-ops if the new title is blank after trimming.
+   */
   const renameSessionTitle = useCallback(
     (id: string, newTitle: string) => {
       if (!newTitle.trim()) return
@@ -81,7 +118,10 @@ export const useSessionManager = (
     [persistSessions]
   )
 
-
+  /**
+   * Switches the active session, discarding any in-progress temporary session,
+   * and saves the new active session ID to localStorage.
+   */
   const switchSession = useCallback(
     (id: string) => {
       // When switching away from temporary session, discard it
@@ -94,6 +134,13 @@ export const useSessionManager = (
     [userId]
   )
 
+  /**
+   * Marks a session as having messages.
+   *
+   * If the session is currently temporary, it is promoted to a permanent session
+   * by adding it to the session list. Otherwise the existing entry's `hasMessages`
+   * flag is flipped to `true`.
+   */
   const markSessionHasMessages = useCallback(
     (id: string) => {
       // If this is a temporary session, make it permanent by adding to sessions list
@@ -117,6 +164,16 @@ export const useSessionManager = (
     [persistSessions, isTemporarySession, sessionId]
   )
 
+  /**
+   * Lazily fetches and backfills titles for sessions that still have placeholder titles.
+   *
+   * Fires parallel requests without blocking the caller. Silently ignores individual
+   * failures so that a single slow/failing session doesn't block the rest.
+   *
+   * @param sessionsToHydrate - The session list to scan for placeholder titles.
+   * @param isMounted - A callback that returns `false` once the component has unmounted,
+   *   used to prevent state updates after cleanup.
+   */
   const hydrateSessionTitles = useCallback(
     async (sessionsToHydrate: SessionSummary[], isMounted: () => boolean) => {
       const token = await getToken()
@@ -130,7 +187,7 @@ export const useSessionManager = (
           try {
             const data = await fetchSessionMessages(token, session.id)
             const firstUserMessage = data.messages.find(msg => msg.role === 'user')
-            
+
             if (firstUserMessage && isMounted()) {
               updateSessionTitle(session.id, generateSessionTitle(firstUserMessage.content))
             }
@@ -142,6 +199,13 @@ export const useSessionManager = (
     [getToken, updateSessionTitle]
   )
 
+  /**
+   * Loads all sessions from the backend, merges them with any locally cached data,
+   * deduplicates, and persists the result.
+   *
+   * @returns An object with `shouldContinue` indicating whether any sessions were found,
+   *   and optionally the merged `sessions` array.
+   */
   const loadUserSessions = useCallback(
     async () => {
       try {
@@ -149,7 +213,7 @@ export const useSessionManager = (
         if (!token) return { shouldContinue: false }
 
         const backendSessions = await fetchUserSessions(token)
-        
+
         // Backend now only returns sessions with messages
         if (backendSessions.length === 0) {
           return { shouldContinue: false }

@@ -15,6 +15,12 @@ interface MessageListProps {
   onFollowupClick?: (text: string) => void
 }
 
+/**
+ * Renders the full list of chat messages in the current session.
+ *
+ * Identifies the last user message so that `MessageItem` can show the edit control
+ * only on that message. All other interaction callbacks are forwarded to each item.
+ */
 export default function MessageList({ messages, onFeedback, theme, animationEnabled, animateMessageId, isLoading, isRegenerating, onEditQuestion, onFollowupClick }: MessageListProps) {
   const lastUserIndex = [...messages].reverse().findIndex(msg => msg.role === 'user')
   const resolvedLastUserIndex = lastUserIndex === -1 ? -1 : messages.length - 1 - lastUserIndex
