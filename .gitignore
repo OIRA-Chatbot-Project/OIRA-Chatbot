@@ -223,3 +223,6 @@ bash.exe.stackdump
 .claude
 # Gemini
 GEMINI.md
+
+# Database backups
+chatbot.db.backup*
