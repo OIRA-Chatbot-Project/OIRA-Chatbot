@@ -15,7 +15,9 @@ import os
 import re
 import json
 import config
-from prompts import get_decompose_prompt, get_user_prompt, get_contextualize_prompt, get_question_classifier_prompt, SYSTEM_PROMPT
+from prompts import get_decompose_prompt, get_user_prompt, get_contextualize_prompt, \
+    get_question_classifier_prompt, get_conversational_prompt, \
+    SYSTEM_PROMPT, CONVERSATIONAL_SYSTEM_PROMPT
 import math
 
 class ChatbotService:
@@ -122,26 +124,47 @@ class ChatbotService:
         # Fallback to catalog (safer than rejecting)
         return "course_catalog"
 
-    def _get_conversational_response(self, category: str, conversation_history: List[Dict[str, str]]) -> Optional[str]:
-        """Return a static response for conversational categories.
+    def _get_llm_conversational_response(
+        self,
+        category: str,
+        question: str,
+        conversation_history: List[Dict[str, str]],
+    ) -> Optional[str]:
+        """Use decompose_llm to generate a natural conversational reply.
+
+        Handles greeting, thank_you, clarification_needed, and off_topic categories.
+        Falls back to None (triggering full RAG) on unexpected errors.
 
         Args:
             category: The classification category of the user's input.
+            question: The student's original message.
             conversation_history: The history of the conversation.
 
         Returns:
-            Optional[str]: A static response string, or None if the category requires RAG.
+            Optional[str]: LLM-generated response string, or None if the category
+            requires RAG.
         """
-        if category == "greeting":
-            # Short response if there's already conversation history
-            if len(conversation_history) > 2:
-                return config.GREETING_SHORT_MESSAGE
-            return config.GREETING_MESSAGE
-        elif category == "thank_you":
-            return config.THANK_YOU_MESSAGE
-        elif category == "clarification_needed":
-            return config.CLARIFICATION_MESSAGE
-        return None
+        CONVERSATIONAL_CATEGORIES = {"greeting", "thank_you", "clarification_needed", "off_topic"}
+        if category not in CONVERSATIONAL_CATEGORIES:
+            return None
+
+        user_prompt = get_conversational_prompt(category, question)
+        messages = [
+            SystemMessage(content=CONVERSATIONAL_SYSTEM_PROMPT),
+            HumanMessage(content=user_prompt),
+        ]
+        try:
+            response = self.decompose_llm.invoke(messages)
+            return (response.content or "").strip() or None
+        except Exception as e:
+            print(f"[WARNING] Conversational LLM failed ({category}): {e}. Using fallback.")
+            fallbacks = {
+                "greeting": config.GREETING_MESSAGE,
+                "thank_you": config.THANK_YOU_MESSAGE,
+                "clarification_needed": config.CLARIFICATION_MESSAGE,
+                "off_topic": config.OFF_TOPIC_MESSAGE,
+            }
+            return fallbacks.get(category)
 
     def _get_document_url(self, source_filename: str, page: int, source_url: Optional[str] = None, doc_type: Optional[str] = None) -> Optional[str]:
         """Generate appropriate URL for a document citation based on its source.
@@ -745,21 +768,11 @@ class ChatbotService:
         # STEP 1: Classify the question
         question_category = self._classify_question(question)
 
-        # STEP 2: Handle conversational responses (greeting, thanks, clarification)
-        conv_response = self._get_conversational_response(question_category, conversation_history)
+        # STEP 2: Handle conversational responses (greeting, thanks, clarification, off_topic)
+        conv_response = self._get_llm_conversational_response(question_category, question, conversation_history)
         if conv_response is not None:
             print(f"[{question_category.upper()}] {question}")
             return (conv_response, [], question_category, [])
-
-        # Reject off-topic questions immediately
-        if question_category == "off_topic":
-            print(f"[OFF-TOPIC] Question rejected: {question}")
-            return (
-                config.OFF_TOPIC_MESSAGE,
-                [],
-                "off_topic",
-                []
-            )
 
         # STEP 3: Determine document type filter
         doc_type_filter = None
@@ -1007,16 +1020,13 @@ class ChatbotService:
         else:
             search_query = results[1]
 
-        # Handle conversational responses (greeting, thanks, clarification)
-        conv_response = self._get_conversational_response(question_category, conversation_history)
+        # Handle conversational responses (greeting, thanks, clarification, off_topic)
+        conv_response = await asyncio.to_thread(
+            self._get_llm_conversational_response, question_category, question, conversation_history
+        )
         if conv_response is not None:
             print(f"[{question_category.upper()}] {question}")
             return (conv_response, [], question_category, [])
-
-        # Reject off-topic questions immediately
-        if question_category == "off_topic":
-            print(f"[OFF-TOPIC] Question rejected: {question}")
-            return (config.OFF_TOPIC_MESSAGE, [], "off_topic", [])
 
         # Determine document type filter
         doc_type_filter = None
@@ -1209,22 +1219,15 @@ class ChatbotService:
         if isinstance(results[1], Exception):
             print(f"[WARNING] Async contextualization failed: {results[1]}")
 
-        # Conversational responses (greeting, thanks, clarification)
-        conv_response = self._get_conversational_response(question_category, conversation_history)
+        # Conversational responses (greeting, thanks, clarification, off_topic)
+        conv_response = await asyncio.to_thread(
+            self._get_llm_conversational_response, question_category, question, conversation_history
+        )
         if conv_response is not None:
             print(f"[{question_category.upper()}] {question}")
             yield f"event: metadata\ndata: {_json.dumps({'category': question_category, 'citations': []})}\n\n"
             yield f"event: token\ndata: {_json.dumps({'token': conv_response})}\n\n"
             yield f"event: done\ndata: {_json.dumps({'answer': conv_response, 'citations': [], 'category': question_category})}\n\n"
-            return
-
-        # Off-topic rejection
-        if question_category == "off_topic":
-            print(f"[OFF-TOPIC] Question rejected: {question}")
-            yield f"event: metadata\ndata: {_json.dumps({'category': 'off_topic', 'citations': []})}\n\n"
-            # Send the full off-topic message as a single token event
-            yield f"event: token\ndata: {_json.dumps({'token': config.OFF_TOPIC_MESSAGE})}\n\n"
-            yield f"event: done\ndata: {_json.dumps({'answer': config.OFF_TOPIC_MESSAGE, 'citations': [], 'category': 'off_topic'})}\n\n"
             return
 
         doc_type_filter = None

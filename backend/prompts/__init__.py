@@ -2,12 +2,14 @@
 Prompt templates and functions for the OIRA chatbot.
 
 Templates are loaded from .md files in this directory at import time.
-Public API is unchanged from the original prompts.py module:
+Public API:
 - SYSTEM_PROMPT: Main system instructions for the chatbot
+- CONVERSATIONAL_SYSTEM_PROMPT: System prompt for conversational (non-RAG) replies
 - get_decompose_prompt(): Query decomposition for multi-step reasoning
 - get_user_prompt(): RAG user message construction
 - get_contextualize_prompt(): Conversation history integration
 - get_question_classifier_prompt(): Question type classification
+- get_conversational_prompt(): User-turn prompt for greeting/thanks/clarification/off_topic
 """
 from pathlib import Path
 from string import Template
@@ -114,3 +116,44 @@ def get_question_classifier_prompt(question: str) -> str:
         Prompt string instructing the LLM to return JSON with classification
     """
     return _CLASSIFIER_TPL.substitute(question=question)
+
+
+CONVERSATIONAL_SYSTEM_PROMPT: str = (
+    "You are a friendly, warm academic assistant for Bucknell University. "
+    "You help students with course information, major requirements, and academic policies. "
+    "Be natural and conversational. Keep responses concise (2-4 sentences max). "
+    "Do not use bullet points or headers for casual exchanges."
+)
+
+
+def _parse_conversational_templates() -> dict[str, Template]:
+    """Parse conversational.md into a dict keyed by category name."""
+    raw = _load("conversational.md")
+    blocks = [b.strip() for b in raw.split("---") if b.strip()]
+    templates: dict[str, Template] = {}
+    for block in blocks:
+        lines = block.splitlines()
+        if lines:
+            category = lines[0].strip()
+            body = "\n".join(lines[1:]).strip()
+            templates[category] = Template(body)
+    return templates
+
+
+_CONVERSATIONAL_TPLS = _parse_conversational_templates()
+
+
+def get_conversational_prompt(category: str, question: str) -> str:
+    """Return the user-turn prompt for a conversational category.
+
+    Args:
+        category: One of greeting, thank_you, clarification_needed, off_topic.
+        question: The student's original message.
+
+    Returns:
+        Formatted prompt string.
+    """
+    tpl = _CONVERSATIONAL_TPLS.get(category, _CONVERSATIONAL_TPLS.get("clarification_needed"))
+    if tpl is None:
+        return f"Student message: {question}"
+    return tpl.substitute(question=question)
