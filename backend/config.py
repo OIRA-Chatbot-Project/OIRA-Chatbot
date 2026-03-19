@@ -60,8 +60,11 @@ ENABLE_OFF_TOPIC_DETECTION = os.getenv("ENABLE_OFF_TOPIC_DETECTION", "true").low
 # Document Type Configuration
 DOCUMENT_TYPE_MAPPINGS = {
     # Catalog documents
+    # Note: markdown versions (datalab-output-*.md) are loaded preferentially over
+    # their PDF counterparts and have doc_type set explicitly at load time.
     "catalog": [
-        "2025-2026 course catalog.pdf"
+        "2025-2026 course catalog.pdf",
+        "datalab-output-2025-2026 course catalog.pdf.md",
     ],
     # Policy documents
     "policy": [

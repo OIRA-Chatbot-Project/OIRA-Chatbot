@@ -55,7 +55,10 @@ def classify_document_type(filename: str) -> str:
     print(f"[WARNING] Could not classify '{filename}', defaulting to 'policy'")
     return "policy"
 
-COURSE_START_RE = re.compile(r'(?m)^(?P<code>[A-Z]{2,4}\\s?\\d{3}[A-Z]?)\\s*[:\\.-]\\s+')
+# Matches both PDF-style ("ANBE 266: ...") and markdown heading-style ("#### **ANBE 266. ...")
+COURSE_START_RE = re.compile(r'(?m)^(?:#{1,6}\s+\*{0,2})?(?P<code>[A-Z]{2,4}\s?\d{3}[A-Z]?)\s*[:\.\-]\s+')
+# Matches paginated markdown page breaks: "{42}---..."
+PAGE_MARKER_MD_RE = re.compile(r'^\{(\d+)\}-+', re.MULTILINE)
 PAGE_MARKER_RE = re.compile(r'\\[\\[PAGE:(\\d+)\\]\\]')
 
 SECTION_PATTERNS = {
@@ -166,35 +169,102 @@ def extract_course_documents(catalog_docs: list) -> list:
     print(f"Extracted {len(course_docs)} course entries from catalog.")
     return course_docs
 
+def load_markdown_catalog_documents(data_path: str) -> tuple[list, set]:
+    """Load markdown catalog files (datalab-output-*.md) from the data directory.
+
+    These are preferred over their PDF counterparts when both exist.
+    Files with paginated format ({N}---...) are split into per-page Documents so
+    that extract_course_documents() can assign accurate page citations.
+
+    If multiple markdown files map to the same PDF (e.g. a plain and a '(1)' variant),
+    the one with the most pages (highest quality) is used.
+
+    Args:
+        data_path: Directory to scan for markdown files.
+
+    Returns:
+        Tuple of (list of Documents, set of PDF basenames that are superseded).
+    """
+    # pdf_name -> (docs, page_count)
+    candidates: dict[str, tuple[list, int]] = {}
+
+    for filename in os.listdir(data_path):
+        if not (filename.startswith("datalab-output-") and filename.endswith(".md")):
+            continue
+
+        raw = filename[len("datalab-output-"):-len(".md")]
+        # Normalize away variant suffixes like " (1)", " (2)" to match the real PDF name
+        pdf_name = re.sub(r'\s+\(\d+\)$', '', raw)
+
+        filepath = os.path.join(data_path, filename)
+        with open(filepath, encoding="utf-8") as f:
+            text = f.read()
+
+        page_markers = list(PAGE_MARKER_MD_RE.finditer(text))
+        docs = []
+        if page_markers:
+            for i, m in enumerate(page_markers):
+                page_num = int(m.group(1))
+                start = m.end()
+                end = page_markers[i + 1].start() if i + 1 < len(page_markers) else len(text)
+                page_text = text[start:end].strip()
+                if page_text:
+                    docs.append(Document(
+                        page_content=page_text,
+                        metadata={"source": filepath, "doc_type": "catalog", "page": page_num},
+                    ))
+            print(f"Found markdown catalog: {filename} ({len(docs)} pages, supersedes '{pdf_name}')")
+        else:
+            docs.append(Document(
+                page_content=text,
+                metadata={"source": filepath, "doc_type": "catalog", "page": 0},
+            ))
+            print(f"Found markdown catalog: {filename} (no page markers, supersedes '{pdf_name}')")
+
+        # Prefer the candidate with more pages
+        existing_count = candidates.get(pdf_name, ([], -1))[1]
+        if len(docs) > existing_count:
+            candidates[pdf_name] = (docs, len(docs))
+
+    md_docs = []
+    superseded_pdfs: set[str] = set()
+    for pdf_name, (docs, page_count) in candidates.items():
+        superseded_pdfs.add(pdf_name)
+        md_docs.extend(docs)
+        print(f"Using markdown for '{pdf_name}': {page_count} page(s) loaded")
+
+    return md_docs, superseded_pdfs
+
+
 #  Load PDFs
 # PyPDFDirectoryLoader automatically adds metadata:
 #   doc.metadata["source"] == filepath
 #   doc.metadata["page"]   == 0-based page number
-# Load PDFs - new way 
-# loader = PyPDFDirectoryLoader(DATA_PATH)
-# raw_documents = loader.load()
-
-# print(f"Loaded {len(raw_documents)} raw pages from {DATA_PATH}")
 pdf_documents = []
+markdown_documents = []
 if not config.GOOGLE_DOCS_ONLY:
+    # Load markdown catalog files first — these take priority over their PDF counterparts
+    markdown_documents, superseded_pdfs = load_markdown_catalog_documents(DATA_PATH)
+
     loader = PyPDFDirectoryLoader(DATA_PATH)
     pdf_documents = loader.load()
-    # Keep only catalog PDFs; policy docs should come from Google Docs
+    # Keep only catalog PDFs that are NOT superseded by a markdown file
     filtered_pdfs = []
     for doc in pdf_documents:
         source_path = doc.metadata.get("source", "")
         filename = os.path.basename(source_path)
-        if classify_document_type(filename) == "catalog":
+        if classify_document_type(filename) == "catalog" and filename not in superseded_pdfs:
             filtered_pdfs.append(doc)
     pdf_documents = filtered_pdfs
-    print(f"Loaded {len(pdf_documents)} catalog pages from {DATA_PATH}")
+    print(f"Loaded {len(pdf_documents)} catalog pages from PDFs in {DATA_PATH}")
+    print(f"Loaded {len(markdown_documents)} document(s) from markdown in {DATA_PATH}")
 
 # Load Google Docs (if configured)
 google_docs = load_google_docs()
 if google_docs:
     print(f"Loaded {len(google_docs)} Google Docs from {config.GOOGLE_DOCS_CSV}")
 
-raw_documents = pdf_documents + google_docs
+raw_documents = pdf_documents + markdown_documents + google_docs
 
 print(f"Total raw documents: {len(raw_documents)}")
 
@@ -256,7 +326,7 @@ vector_store = Chroma(
 )
 
 #  Add in batches 
-BATCH_SIZE = 200
+BATCH_SIZE = 100
 uuids = [str(uuid4()) for _ in range(len(chunks))]
 total = len(chunks)
 print(f"Total chunks to upsert: {total}")
