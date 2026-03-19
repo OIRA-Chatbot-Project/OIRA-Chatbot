@@ -8,13 +8,14 @@ Public API:
 - POLICY_SYSTEM_PROMPT: System prompt tailored for academic_policy questions
 - CONVERSATIONAL_SYSTEM_PROMPT: System prompt for conversational (non-RAG) replies
 - get_decompose_prompt(): Query decomposition for multi-step reasoning
-- get_user_prompt(): RAG user message construction
+- get_user_prompt(): RAG user message construction (supports summary + user_profile)
 - get_contextualize_prompt(): Conversation history integration
 - get_question_classifier_prompt(): Question type classification
 - get_conversational_prompt(): User-turn prompt for greeting/thanks/clarification/off_topic
 """
 from pathlib import Path
 from string import Template
+from typing import Optional, Dict
 
 _DIR = Path(__file__).parent
 
@@ -51,31 +52,75 @@ def get_decompose_prompt(question: str) -> str:
     return _DECOMPOSE_TPL.substitute(question=question)
 
 
-def get_user_prompt(question: str, knowledge: str, history_context: str) -> str:
+def get_user_prompt(
+    question: str,
+    knowledge: str,
+    history_context: str,
+    summary: Optional[str] = None,
+    user_profile: Optional[Dict[str, str]] = None,
+) -> str:
     """
     Build the user message for RAG generation.
 
-    Combines the user's question with retrieved knowledge and conversation history
-    to create a complete prompt for answer generation.
+    Combines the user's question with retrieved knowledge, conversation history,
+    an optional session summary, and an optional persistent user profile.
+
+    Section injection order (top → bottom):
+    1. USER CONTEXT — if user_profile is non-empty
+    2. CONVERSATION SUMMARY — if summary is non-empty
+    3. CONVERSATION HISTORY — verbatim last-N messages
+    4. KNOWLEDGE — retrieved documents
+    5. QUESTION + instructions
 
     Args:
         question: The user's current question
         knowledge: Retrieved context from the vector store (with citations)
         history_context: Formatted conversation history (empty string if none)
+        summary: Optional paragraph summarising older messages no longer in the verbatim window
+        user_profile: Optional dict of persistent facts about the user (major, year, etc.)
 
     Returns:
         Formatted user prompt string with all context
     """
     prompt_parts = []
 
-    # Add knowledge section (always present)
-    prompt_parts.append(f"KNOWLEDGE:\n{knowledge}\n")
+    # 1. USER CONTEXT block
+    if user_profile:
+        user_type = user_profile.get("user_type", "unknown")
+        if user_type == "student":
+            header_label = "this student"
+        elif user_type in ("faculty", "advisor", "staff"):
+            header_label = "this user"
+        else:
+            header_label = "this user"
 
-    # Add conversation history if available
+        facts_lines = "\n".join(f"{k}: {v}" for k, v in user_profile.items())
+        prompt_parts.append(
+            f"USER CONTEXT:\n"
+            f"The following facts about {header_label} are known from prior conversations.\n"
+            f"Use them to personalize your answer, but do NOT treat them as confirmed "
+            f"unless the user restates them in this session.\n"
+            f"{facts_lines}\n"
+        )
+
+    # 2. CONVERSATION SUMMARY block
+    if summary:
+        prompt_parts.append(
+            f"CONVERSATION SUMMARY:\n"
+            f"The following is a summary of earlier messages in this session no longer in the "
+            f"verbatim history window. Use it for additional context but prioritize the "
+            f"verbatim CONVERSATION HISTORY for recent specifics.\n"
+            f"{summary}\n"
+        )
+
+    # 3. CONVERSATION HISTORY block
     if history_context:
         prompt_parts.append(f"CONVERSATION HISTORY:\n{history_context}\n")
 
-    # Add the user's question
+    # 4. KNOWLEDGE block (always present)
+    prompt_parts.append(f"KNOWLEDGE:\n{knowledge}\n")
+
+    # 5. QUESTION + instructions
     prompt_parts.append(
         f"QUESTION:\n{question}\n\n"
         "Please answer the question using ONLY the database in the knowledge base above. "

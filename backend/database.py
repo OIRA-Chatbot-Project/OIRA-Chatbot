@@ -40,14 +40,15 @@ Base = declarative_base()
 class User(Base):
     """Represents a user authenticated via Clerk"""
     __tablename__ = "users"
-    
+
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     clerk_user_id = Column(String, unique=True, index=True, nullable=False)
     email = Column(String, nullable=False)
     name = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
+    profile_facts = Column(Text, nullable=True)  # JSON: {"major": "CS", "year": "junior", ...}
+
     # Relationships
     sessions = relationship("Session", back_populates="user")
 
@@ -59,6 +60,7 @@ class Session(Base):
     session_id = Column(String, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     title = Column(String, nullable=True)  # AI-generated title
+    conversation_summary = Column(Text, nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(datetime.UTC) if hasattr(datetime, 'UTC') else datetime.utcnow()) #type: ignore
     updated_at = Column(DateTime, default=lambda: datetime.now(datetime.UTC) if hasattr(datetime, 'UTC') else datetime.utcnow(), onupdate=lambda: datetime.now(datetime.UTC) if hasattr(datetime, 'UTC') else datetime.utcnow()) #type: ignore
     
@@ -94,11 +96,11 @@ class Feedback(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
-# Create all tables
 def init_db():
     """Initialize database tables.
 
     Creates all tables defined in the SQLAlchemy models if they do not already exist.
+    Run `python recreate_db.py` to apply schema changes during development.
     """
     Base.metadata.create_all(bind=engine)
 

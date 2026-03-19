@@ -700,6 +700,120 @@ class ChatbotService:
                 deduped.append(q)
         return deduped
 
+    async def _summarize_conversation(
+        self,
+        session_id: str,
+        existing_summary: Optional[str],
+        messages_to_summarize: List[Dict[str, str]],
+    ) -> str:
+        """Compress older messages into a brief summary paragraph.
+
+        Args:
+            session_id: Used only for logging.
+            existing_summary: Any previous summary to incorporate.
+            messages_to_summarize: Older messages no longer in the verbatim window.
+
+        Returns:
+            str: Updated summary paragraph, or existing_summary unchanged on failure.
+        """
+        if not messages_to_summarize:
+            return existing_summary or ""
+
+        history_text = "\n".join(
+            f"{m['role'].capitalize()}: {m['content']}" for m in messages_to_summarize
+        )
+
+        if existing_summary:
+            prompt = (
+                "You are summarizing a student–assistant chat session. "
+                "Below is a prior summary and additional messages. "
+                "Produce a single updated 3–6 sentence third-person paragraph that incorporates both. "
+                "Capture: topics asked, key facts the student mentioned, decisions or clarifications made. "
+                "Return ONLY the paragraph, no preamble.\n\n"
+                f"PRIOR SUMMARY:\n{existing_summary}\n\n"
+                f"NEW MESSAGES:\n{history_text}"
+            )
+        else:
+            prompt = (
+                "You are summarizing a student–assistant chat session. "
+                "Write a 3–6 sentence third-person paragraph capturing: "
+                "topics asked, key facts the student mentioned, decisions or clarifications made. "
+                "Return ONLY the paragraph, no preamble.\n\n"
+                f"MESSAGES:\n{history_text}"
+            )
+
+        try:
+            response = await asyncio.to_thread(self.decompose_llm.invoke, prompt)
+            result = (response.content or "").strip()
+            if result:
+                print(f"[MEMORY] Session {session_id}: summary updated ({len(result)} chars)")
+                return result
+        except Exception as e:
+            print(f"[WARNING] Summarization failed for session {session_id}: {e}")
+
+        return existing_summary or ""
+
+    async def _extract_user_facts(
+        self,
+        user_message: str,
+        existing_facts: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Extract and merge persistent user facts from a single message.
+
+        Args:
+            user_message: The latest user message to scan.
+            existing_facts: Facts already stored for this user.
+
+        Returns:
+            Dict: Merged facts dict; unchanged on failure.
+        """
+        prompt = (
+            "You extract persistent facts about a Bucknell University user from a single message.\n\n"
+            "STEP 1 – Detect user type from context clues (words like 'I am a professor', "
+            "'as a student', 'I advise students', 'in my department', etc.).\n"
+            "Set 'user_type' to one of: student, faculty, advisor, staff, unknown.\n\n"
+            "STEP 2 – Extract only the facts that are explicitly stated. "
+            "For students: major, minor, concentration, year (freshman/sophomore/junior/senior), "
+            "college, completed_courses (comma-separated course codes), interests, advisor.\n"
+            "For faculty/advisor/staff: department, role_title, interests.\n\n"
+            "Rules:\n"
+            "- Return {} if nothing relevant is found.\n"
+            "- All keys are optional; only include what is explicitly stated.\n"
+            "- Return ONLY valid JSON, no explanation.\n\n"
+            f"MESSAGE:\n{user_message}"
+        )
+
+        try:
+            response = await asyncio.to_thread(self.decompose_llm.invoke, prompt)
+            raw = (response.content or "").strip()
+            # Extract JSON object from any surrounding text
+            json_start = raw.find('{')
+            json_end = raw.rfind('}') + 1
+            if json_start < 0 or json_end <= json_start:
+                return existing_facts
+            new_facts: Dict[str, Any] = json.loads(raw[json_start:json_end])
+            if not new_facts:
+                return existing_facts
+
+            merged: Dict[str, Any] = {**existing_facts, **new_facts}
+
+            # List-type fields: union rather than replace
+            for list_key in ("completed_courses", "interests"):
+                old_val = existing_facts.get(list_key, "")
+                new_val = new_facts.get(list_key, "")
+                if old_val and new_val:
+                    merged[list_key] = ", ".join(sorted(
+                        {c.strip().upper() for c in str(old_val).split(",")} |
+                        {c.strip().upper() for c in str(new_val).split(",")}
+                    ))
+
+            print(f"[MEMORY] User facts updated: {list(merged.keys())}")
+            return merged
+
+        except (json.JSONDecodeError, Exception) as e:
+            print(f"[WARNING] User fact extraction failed: {e}")
+            return existing_facts
+
     def _generate_followups(self, question: str, answer: str, conversation_history: List[Dict[str, str]]) -> List[str]:
         """Generate up to 5 suggested follow-up questions tailored to the user's context.
 
@@ -756,7 +870,14 @@ class ChatbotService:
         ]
         return fallback[:3]
     
-    def get_answer(self, question: str, conversation_history: List[Dict[str, str]], use_multi_step: Optional[bool] = None) -> Tuple[str, List[Dict], str, List[str]]:
+    def get_answer(
+        self,
+        question: str,
+        conversation_history: List[Dict[str, str]],
+        use_multi_step: Optional[bool] = None,
+        conversation_summary: Optional[str] = None,
+        user_profile: Optional[Dict[str, Any]] = None,
+    ) -> Tuple[str, List[Dict], str, List[str]]:
         """Get an answer to a question using RAG with optional multi-step query decomposition.
 
         Now includes question classification and document type filtering.
@@ -765,6 +886,8 @@ class ChatbotService:
             question: The user's question.
             conversation_history: List of previous messages with 'role' and 'content'.
             use_multi_step: Whether to use multi-step query decomposition (default: from config).
+            conversation_summary: Optional paragraph summarising older messages outside window.
+            user_profile: Optional persistent facts about the user (major, year, etc.).
 
         Returns:
             Tuple[str, List[Dict], str, List[str]]: A tuple containing:
@@ -932,7 +1055,11 @@ class ChatbotService:
             ])
 
         # Build prompt using system/user message separation
-        user_prompt = get_user_prompt(question, knowledge, history_context if conversation_history else "")
+        user_prompt = get_user_prompt(
+            question, knowledge, history_context if conversation_history else "",
+            summary=conversation_summary or None,
+            user_profile=user_profile or None,
+        )
 
         try:
             # Use system/user message structure
@@ -997,13 +1124,22 @@ class ChatbotService:
         )
         return self.get_answer(question, conversation_history)
 
-    async def get_answer_async(self, question: str, conversation_history: List[Dict[str, str]], use_multi_step: Optional[bool] = None) -> Tuple[str, List[Dict], str, List[str]]:
+    async def get_answer_async(
+        self,
+        question: str,
+        conversation_history: List[Dict[str, str]],
+        use_multi_step: Optional[bool] = None,
+        conversation_summary: Optional[str] = None,
+        user_profile: Optional[Dict[str, Any]] = None,
+    ) -> Tuple[str, List[Dict], str, List[str]]:
         """Async version of get_answer that parallelizes classification and contextualization.
 
         Args:
             question: The user's question.
             conversation_history: List of previous messages.
             use_multi_step: Whether to use multi-step query decomposition.
+            conversation_summary: Optional paragraph summarising older messages outside window.
+            user_profile: Optional persistent facts about the user (major, year, etc.).
 
         Returns:
             Tuple[str, List[Dict], str, List[str]]: (answer, citations, question_category, followups).
@@ -1159,7 +1295,11 @@ class ChatbotService:
                 for msg in conversation_history[-6:]
             ])
 
-        user_prompt = get_user_prompt(question, knowledge, history_context if conversation_history else "")
+        user_prompt = get_user_prompt(
+            question, knowledge, history_context if conversation_history else "",
+            summary=conversation_summary or None,
+            user_profile=user_profile or None,
+        )
 
         try:
             messages = [
@@ -1199,7 +1339,14 @@ class ChatbotService:
                 citations, question_category, []
             )
 
-    async def get_answer_streaming(self, question: str, conversation_history: List[Dict[str, str]], use_multi_step: Optional[bool] = None):
+    async def get_answer_streaming(
+        self,
+        question: str,
+        conversation_history: List[Dict[str, str]],
+        use_multi_step: Optional[bool] = None,
+        conversation_summary: Optional[str] = None,
+        user_profile: Optional[Dict[str, Any]] = None,
+    ):
         """Async generator that yields SSE-formatted events for streaming responses.
 
         Events: metadata, token, followups, done
@@ -1208,6 +1355,8 @@ class ChatbotService:
             question: The user's question.
             conversation_history: List of previous messages.
             use_multi_step: Whether to use multi-step query decomposition.
+            conversation_summary: Optional paragraph summarising older messages outside window.
+            user_profile: Optional persistent facts about the user (major, year, etc.).
 
         Yields:
             str: SSE-formatted event strings.
@@ -1333,7 +1482,11 @@ class ChatbotService:
                 f"{msg['role'].capitalize()}: {msg['content'][:300]}"
                 for msg in conversation_history[-6:]
             ])
-        user_prompt = get_user_prompt(question, knowledge, history_context if conversation_history else "")
+        user_prompt = get_user_prompt(
+            question, knowledge, history_context if conversation_history else "",
+            summary=conversation_summary or None,
+            user_profile=user_profile or None,
+        )
 
         messages = [
             SystemMessage(content=self._get_system_prompt(question_category)),

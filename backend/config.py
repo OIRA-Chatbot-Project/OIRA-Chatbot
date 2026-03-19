@@ -57,6 +57,10 @@ ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://loc
 QUESTION_CLASSIFIER_TEMPERATURE = float(os.getenv("QUESTION_CLASSIFIER_TEMPERATURE", "0.1"))
 ENABLE_OFF_TOPIC_DETECTION = os.getenv("ENABLE_OFF_TOPIC_DETECTION", "true").lower() == "true"
 
+# Conversation Memory Configuration
+SUMMARY_WINDOW_SIZE = int(os.getenv("SUMMARY_WINDOW_SIZE", "6"))  # messages kept verbatim
+ENABLE_CONVERSATION_MEMORY = os.getenv("ENABLE_CONVERSATION_MEMORY", "true").lower() == "true"
+
 # Document Type Configuration
 DOCUMENT_TYPE_MAPPINGS = {
     # Catalog documents

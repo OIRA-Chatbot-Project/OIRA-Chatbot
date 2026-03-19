@@ -7,16 +7,99 @@ sending messages, regenerating responses, and streaming responses.
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
+import asyncio
 import re
 import json
 from datetime import datetime
 
-from database import get_db, Session as DBSession, User as DBUser, Message as DBMessage, Feedback as DBFeedback
+from database import get_db, SessionLocal, Session as DBSession, User as DBUser, Message as DBMessage, Feedback as DBFeedback
 from models import ChatRequest, ChatResponse, Citation, RegenerateRequest
 from auth import get_current_user, get_user_id_from_token
 from chatbot_service import get_chatbot_service
+import config
 
 router = APIRouter(prefix="/chat", tags=["chat"])
+
+
+async def _run_post_response_tasks(
+    session_id: str,
+    user_message_content: str,
+    clerk_user_id: str,
+) -> None:
+    """Run background memory tasks after the response has been sent.
+
+    1. Extracts persistent user facts from the latest message and saves them to User.profile_facts.
+    2. If total session message count exceeds SUMMARY_WINDOW_SIZE, summarizes older messages
+       and saves the result to Session.conversation_summary.
+
+    Opens its own DB connection — never shares the request-scoped session.
+    All exceptions are caught and logged; they never bubble up to affect the user response.
+    """
+    if not config.ENABLE_CONVERSATION_MEMORY:
+        return
+
+    db = SessionLocal()
+    try:
+        chatbot = get_chatbot_service()
+
+        # --- Fact extraction ---
+        user = db.query(DBUser).filter(DBUser.clerk_user_id == clerk_user_id).first()
+        if user:
+            existing_facts: dict = {}
+            if user.profile_facts:
+                try:
+                    existing_facts = json.loads(user.profile_facts)
+                except json.JSONDecodeError:
+                    existing_facts = {}
+
+            updated_facts = await chatbot._extract_user_facts(user_message_content, existing_facts)
+            if updated_facts != existing_facts:
+                user.profile_facts = json.dumps(updated_facts)
+                db.commit()
+
+        # --- Summarization ---
+        total_count = db.query(DBMessage).filter(
+            DBMessage.session_id == session_id
+        ).count()
+
+        if total_count > config.SUMMARY_WINDOW_SIZE:
+            session_obj = db.query(DBSession).filter(
+                DBSession.session_id == session_id
+            ).first()
+            if session_obj:
+                # Messages to summarize = everything except the most recent SUMMARY_WINDOW_SIZE
+                messages_to_keep = (
+                    db.query(DBMessage)
+                    .filter(DBMessage.session_id == session_id)
+                    .order_by(DBMessage.created_at.desc())
+                    .limit(config.SUMMARY_WINDOW_SIZE)
+                    .all()
+                )
+                keep_ids = {m.id for m in messages_to_keep}
+                older_messages = (
+                    db.query(DBMessage)
+                    .filter(
+                        DBMessage.session_id == session_id,
+                        ~DBMessage.id.in_(keep_ids),
+                    )
+                    .order_by(DBMessage.created_at.asc())
+                    .all()
+                )
+                messages_to_summarize = [
+                    {"role": m.role, "content": m.content} for m in older_messages
+                ]
+                existing_summary = session_obj.conversation_summary or None
+                new_summary = await chatbot._summarize_conversation(
+                    session_id, existing_summary, messages_to_summarize
+                )
+                if new_summary and new_summary != existing_summary:
+                    session_obj.conversation_summary = new_summary
+                    db.commit()
+
+    except Exception as e:
+        print(f"[WARNING] Background memory task failed for session {session_id}: {e}")
+    finally:
+        db.close()
 
 
 @router.post("", response_model=ChatResponse)
@@ -90,9 +173,24 @@ async def chat(
             for msg in reversed(history_messages)  # Reverse to get chronological order
         ]
 
+        # Load session summary and user profile for memory-augmented generation
+        session_summary = (session.conversation_summary or None) if session else None
+
+        user_profile: dict = {}
+        if user.profile_facts:
+            try:
+                user_profile = json.loads(user.profile_facts)
+            except json.JSONDecodeError:
+                user_profile = {}
+
         # Get answer from chatbot service (async version with parallel LLM calls)
         chatbot = get_chatbot_service()
-        answer, citations, question_category, followups = await chatbot.get_answer_async(request.message, conversation_history)
+        answer, citations, question_category, followups = await chatbot.get_answer_async(
+            request.message,
+            conversation_history,
+            conversation_summary=session_summary,
+            user_profile=user_profile or None,
+        )
 
         # Remove inline bracket citations like "[filename, p. 123]" from the answer
         try:
@@ -121,6 +219,15 @@ async def chat(
 
         # Convert citations to response model
         citation_objects = [Citation(**c) for c in citations]
+
+        # Fire background memory tasks after response is committed
+        asyncio.create_task(
+            _run_post_response_tasks(
+                session_id=request.session_id,
+                user_message_content=request.message,
+                clerk_user_id=clerk_user_id,
+            )
+        )
 
         return ChatResponse(
             message_id=assistant_message.id,
@@ -232,9 +339,22 @@ async def regenerate(
             for msg in reversed(history_messages)
         ]
 
+        # Load session summary and user profile
+        session_summary = (session.conversation_summary or None) if session else None
+
+        user_profile: dict = {}
+        if user.profile_facts:
+            try:
+                user_profile = json.loads(user.profile_facts)
+            except json.JSONDecodeError:
+                user_profile = {}
+
         chatbot = get_chatbot_service()
         answer, citations, question_category, followups = await chatbot.get_answer_async(
-            user_message.content, conversation_history
+            user_message.content,
+            conversation_history,
+            conversation_summary=session_summary,
+            user_profile=user_profile or None,
         )
 
         cleaned_answer = _clean_answer(answer)
@@ -250,6 +370,15 @@ async def regenerate(
         db.refresh(assistant_message)
 
         citation_objects = [Citation(**c) for c in citations]
+
+        # Fire background memory tasks
+        asyncio.create_task(
+            _run_post_response_tasks(
+                session_id=request.session_id,
+                user_message_content=user_message.content,
+                clerk_user_id=clerk_user_id,
+            )
+        )
 
         return ChatResponse(
             message_id=assistant_message.id,
@@ -330,8 +459,19 @@ async def chat_stream(
         for msg in reversed(history_messages)
     ]
 
+    # Load session summary and user profile before entering generator
+    session_summary_stream = (session.conversation_summary or None) if session else None
+
+    user_profile_stream: dict = {}
+    if user.profile_facts:
+        try:
+            user_profile_stream = json.loads(user.profile_facts)
+        except json.JSONDecodeError:
+            user_profile_stream = {}
+
     chatbot = get_chatbot_service()
     user_message_id = user_message.id
+    _clerk_user_id_stream = clerk_user_id
 
     async def event_generator():
         final_answer = ""
@@ -341,7 +481,12 @@ async def chat_stream(
         try:
             user_payload = json.dumps({"message_id": user_message_id})
             yield f"event: user\ndata: {user_payload}\n\n"
-            async for event in chatbot.get_answer_streaming(request.message, conversation_history):
+            async for event in chatbot.get_answer_streaming(
+                request.message,
+                conversation_history,
+                conversation_summary=session_summary_stream,
+                user_profile=user_profile_stream or None,
+            ):
                 # Forward all events from the service
                 yield event
 
@@ -374,6 +519,15 @@ async def chat_stream(
 
             saved_payload = json.dumps({"message_id": assistant_message.id})
             yield f"event: saved\ndata: {saved_payload}\n\n"
+
+            # Fire background memory tasks after message is persisted
+            asyncio.create_task(
+                _run_post_response_tasks(
+                    session_id=request.session_id,
+                    user_message_content=request.message,
+                    clerk_user_id=_clerk_user_id_stream,
+                )
+            )
         except Exception as e:
             print(f"[ERROR] DB save error after stream: {e}")
             db.rollback()
@@ -453,6 +607,17 @@ async def regenerate_stream(
         for msg in reversed(history_messages)
     ]
 
+    # Load session summary and user profile
+    regen_session_summary = (session.conversation_summary or None) if session else None
+
+    regen_user_profile: dict = {}
+    if user.profile_facts:
+        try:
+            regen_user_profile = json.loads(user.profile_facts)
+        except json.JSONDecodeError:
+            regen_user_profile = {}
+
+    _regen_clerk_user_id = clerk_user_id
     chatbot = get_chatbot_service()
 
     async def event_generator():
@@ -460,7 +625,12 @@ async def regenerate_stream(
         final_citations = []
 
         try:
-            async for event in chatbot.get_answer_streaming(user_message.content, conversation_history):
+            async for event in chatbot.get_answer_streaming(
+                user_message.content,
+                conversation_history,
+                conversation_summary=regen_session_summary,
+                user_profile=regen_user_profile or None,
+            ):
                 yield event
 
                 if event.startswith("event: done"):
@@ -489,6 +659,15 @@ async def regenerate_stream(
 
             saved_payload = json.dumps({"message_id": assistant_message.id})
             yield f"event: saved\ndata: {saved_payload}\n\n"
+
+            # Fire background memory tasks
+            asyncio.create_task(
+                _run_post_response_tasks(
+                    session_id=request.session_id,
+                    user_message_content=user_message.content,
+                    clerk_user_id=_regen_clerk_user_id,
+                )
+            )
         except Exception as e:
             print(f"[ERROR] DB save error after regenerate stream: {e}")
             db.rollback()
