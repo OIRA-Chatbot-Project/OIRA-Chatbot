@@ -17,7 +17,7 @@ import json
 import config
 from prompts import get_decompose_prompt, get_user_prompt, get_contextualize_prompt, \
     get_question_classifier_prompt, get_conversational_prompt, \
-    SYSTEM_PROMPT, CONVERSATIONAL_SYSTEM_PROMPT
+    SYSTEM_PROMPT, CONVERSATIONAL_SYSTEM_PROMPT, CATALOG_SYSTEM_PROMPT, POLICY_SYSTEM_PROMPT
 import math
 
 class ChatbotService:
@@ -123,6 +123,14 @@ class ChatbotService:
 
         # Fallback to catalog (safer than rejecting)
         return "course_catalog"
+
+    def _get_system_prompt(self, question_category: str) -> str:
+        """Return the appropriate system prompt for the question category."""
+        if question_category == "course_catalog":
+            return CATALOG_SYSTEM_PROMPT
+        if question_category == "academic_policy":
+            return POLICY_SYSTEM_PROMPT
+        return SYSTEM_PROMPT  # fallback for unexpected categories
 
     def _get_llm_conversational_response(
         self,
@@ -929,7 +937,7 @@ class ChatbotService:
         try:
             # Use system/user message structure
             messages = [
-                SystemMessage(content=SYSTEM_PROMPT),
+                SystemMessage(content=self._get_system_prompt(question_category)),
                 HumanMessage(content=user_prompt)
             ]
 
@@ -951,8 +959,8 @@ class ChatbotService:
                 if not answer:
                     answer = fallback_sentence
 
-            # Add disclaimer under every response
-            if answer != fallback_sentence:
+            # Add disclaimer for catalog and policy responses
+            if answer != fallback_sentence and question_category in ("academic_policy", "course_catalog"):
                 answer = answer + config.POLICY_DISCLAIMER
 
             # Generate follow-up suggestions tailored to the user's context
@@ -1155,7 +1163,7 @@ class ChatbotService:
 
         try:
             messages = [
-                SystemMessage(content=SYSTEM_PROMPT),
+                SystemMessage(content=self._get_system_prompt(question_category)),
                 HumanMessage(content=user_prompt)
             ]
             response = await asyncio.to_thread(self.llm.invoke, messages)
@@ -1172,7 +1180,7 @@ class ChatbotService:
                 if not answer:
                     answer = fallback_sentence
 
-            if answer != fallback_sentence:
+            if answer != fallback_sentence and question_category == "academic_policy":
                 answer = answer + config.POLICY_DISCLAIMER
 
             # Generate follow-ups off the critical path (via thread)
@@ -1328,7 +1336,7 @@ class ChatbotService:
         user_prompt = get_user_prompt(question, knowledge, history_context if conversation_history else "")
 
         messages = [
-            SystemMessage(content=SYSTEM_PROMPT),
+            SystemMessage(content=self._get_system_prompt(question_category)),
             HumanMessage(content=user_prompt)
         ]
 
@@ -1355,8 +1363,8 @@ class ChatbotService:
             "For official guidance and questions about how these policies apply to your specific situation, "
             "please consult with your academic advisor or the Office of the Registrar.")
 
-        # Add disclaimer under every response (sent as final token)
-        if answer != fallback_sentence:
+        # Add disclaimer for catalog and policy responses (sent as final token)
+        if answer != fallback_sentence and question_category in ("academic_policy", "course_catalog"):
             yield f"event: token\ndata: {_json.dumps({'token': config.POLICY_DISCLAIMER})}\n\n"
             answer = answer + config.POLICY_DISCLAIMER
 

@@ -3,7 +3,9 @@ Prompt templates and functions for the OIRA chatbot.
 
 Templates are loaded from .md files in this directory at import time.
 Public API:
-- SYSTEM_PROMPT: Main system instructions for the chatbot
+- SYSTEM_PROMPT: Fallback system instructions (used when category is unrecognised)
+- CATALOG_SYSTEM_PROMPT: System prompt tailored for course_catalog questions
+- POLICY_SYSTEM_PROMPT: System prompt tailored for academic_policy questions
 - CONVERSATIONAL_SYSTEM_PROMPT: System prompt for conversational (non-RAG) replies
 - get_decompose_prompt(): Query decomposition for multi-step reasoning
 - get_user_prompt(): RAG user message construction
@@ -24,6 +26,8 @@ def _load(filename: str) -> str:
 
 # Load all templates once at import time
 SYSTEM_PROMPT: str = _load("system.md")
+CATALOG_SYSTEM_PROMPT: str = _load("system_catalog.md")
+POLICY_SYSTEM_PROMPT: str = _load("system_policy.md")
 
 _DECOMPOSE_TPL = Template(_load("decompose.md"))
 _CONTEXTUALIZE_TPL = Template(_load("contextualize.md"))
