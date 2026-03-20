@@ -48,8 +48,12 @@ export default function Sidebar({
   theme,
   disableNewChat = false,
 }: SidebarProps) {
-  const { user } = useUser()
+  useUser()
   const [isCollapsed, setIsCollapsed] = useState(false)
+  const [sidebarWidth, setSidebarWidth] = useState(288)
+  const isResizing = useRef(false)
+  const startX = useRef(0)
+  const startWidth = useRef(0)
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [searchCache, setSearchCache] = useState<Record<string, { fullText: string; lowerText: string; preview: string }>>({})
@@ -61,6 +65,28 @@ export default function Sidebar({
   const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null)
   const menuContainerRef = useRef<HTMLDivElement | null>(null)
   const menuPortalRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizing.current) return
+      const delta = e.clientX - startX.current
+      const newWidth = Math.min(600, Math.max(200, startWidth.current + delta))
+      setSidebarWidth(newWidth)
+    }
+    const handleMouseUp = () => {
+      if (isResizing.current) {
+        isResizing.current = false
+        document.body.style.cursor = ''
+        document.body.style.userSelect = ''
+      }
+    }
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+    }
+  }, [])
 
   useEffect(() => {
     searchCacheRef.current = searchCache
@@ -214,7 +240,7 @@ export default function Sidebar({
     setIsCollapsed(false)
   }
 
-  const searchPanelLeft = isCollapsed ? '100px' : '300px'
+  const searchPanelLeft = isCollapsed ? '100px' : `${sidebarWidth + 12}px`
 
   if (isCollapsed) {
     return (
@@ -366,11 +392,12 @@ export default function Sidebar({
   return (
     <>
       <div
-        className={`w-72 flex-shrink-0 flex flex-col border-r backdrop-blur-2xl ${
+        className={`flex-shrink-0 flex flex-col border-r backdrop-blur-2xl relative ${
           theme === 'dark'
             ? 'bg-slate-900/70 border-slate-800 text-slate-100'
             : 'bg-white/70 border-white/60 text-slate-900 shadow-[0_0_45px_rgba(15,23,42,0.08)]'
         }`}
+        style={{ width: sidebarWidth }}
       >
       {/* Header */}
       <div
@@ -526,6 +553,21 @@ export default function Sidebar({
           Session {currentSessionId.slice(0, 8)}…
         </p>
       </div>
+
+      {/* Resize handle */}
+      <div
+        className={`absolute top-0 right-0 w-1 h-full cursor-col-resize z-10 group/resize ${
+          theme === 'dark' ? 'hover:bg-indigo-500/60' : 'hover:bg-primary/40'
+        } transition-colors`}
+        onMouseDown={(e) => {
+          isResizing.current = true
+          startX.current = e.clientX
+          startWidth.current = sidebarWidth
+          document.body.style.cursor = 'col-resize'
+          document.body.style.userSelect = 'none'
+          e.preventDefault()
+        }}
+      />
     </div>
       {searchOverlay}
       {isClient && openMenuSessionId && menuPosition
