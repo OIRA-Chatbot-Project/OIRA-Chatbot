@@ -229,19 +229,37 @@ export const useSessionManager = (
             storedTitle && !isPlaceholderTitle(storedTitle)
               ? storedTitle
               : s.title || DEFAULT_SESSION_TITLE
+          // Use updated_at for ordering (most recent activity first) and fall back
+          // to created_at. Both may arrive as naive UTC strings (no 'Z') from SQLite,
+          // so we append 'Z' to force UTC interpretation instead of local time.
+          const toUtcMs = (dt: string) =>
+            new Date(dt.endsWith('Z') || dt.includes('+') ? dt : dt + 'Z').getTime()
+          const timestamp = toUtcMs(s.updated_at ?? s.created_at)
           return {
             id: s.session_id,
-            timestamp: new Date(s.created_at).getTime(),
+            timestamp,
             title,
             hasMessages: s.has_messages,
           }
         })
 
+        // Merge backend sessions with any locally-added sessions that haven't
+        // been confirmed by the backend yet (e.g. first message still in-flight).
+        // Sessions present in the backend response take precedence; local-only
+        // sessions are preserved so they don't disappear during the async window.
+        const backendIds = new Set(formattedSessions.map(s => s.id))
+        setSessions(prevSessions => {
+          const localOnly = prevSessions.filter(s => !backendIds.has(s.id))
+          const merged = dedupeSessions([...formattedSessions, ...localOnly])
+          if (userId) {
+            saveSessionsToStorage(userId, merged)
+          }
+          return merged
+        })
+
+        // Return the backend-only deduplicated list for hydrateSessionTitles.
+        // Local-only sessions don't need title hydration (they were just created).
         const dedupedSessions = dedupeSessions(formattedSessions)
-        setSessions(dedupedSessions)
-        if (userId) {
-          saveSessionsToStorage(userId, dedupedSessions)
-        }
 
         return { shouldContinue: true, sessions: dedupedSessions }
       } catch (error) {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useAuth, useUser } from "@clerk/nextjs";
 import { v4 as uuidv4 } from "uuid";
 import ChatInterface from "./components/ChatInterface";
@@ -33,6 +33,10 @@ export default function Home() {
   const [theme, setTheme] = useState<Theme>("light");
   const [isCurrentSessionEmpty, setIsCurrentSessionEmpty] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
+
+  // Stable refs so the initializeSessions effect doesn't re-run when these callbacks change.
+  const startNewChatRef = useRef<() => void>(() => {});
+  const setSessionIdRef = useRef<(id: string) => void>(() => {});
 
   const {
     sessions,
@@ -183,6 +187,10 @@ export default function Home() {
     [getToken, renameSessionTitle]
   );
 
+  // Keep refs in sync with the latest callbacks without changing their identity.
+  useEffect(() => { startNewChatRef.current = startNewChat; }, [startNewChat]);
+  useEffect(() => { setSessionIdRef.current = setSessionId; }, [setSessionId]);
+
   // Load user sessions from backend - only after user is initialized
   useEffect(() => {
     if (!isLoaded || !isSignedIn || !user || !isInitialized) return;
@@ -206,19 +214,19 @@ export default function Home() {
         if (!hasActiveSession) {
           // First access in this tab - create new temporary chat
           if (isMounted) {
-            startNewChat();
+            startNewChatRef.current();
             sessionStorage.setItem('hasActiveSession', 'true');
           }
         } else if (result.shouldContinue && result.sessions && result.sessions.length > 0) {
           // Reload - restore the last active session
           const savedSessionId = user?.id ? loadCurrentSessionId(user.id) : null;
-          const activeSessionId = 
+          const activeSessionId =
             savedSessionId && result.sessions.find(s => s.id === savedSessionId)
               ? savedSessionId
               : result.sessions[0].id;
-          
+
           if (isMounted) {
-            setSessionId(activeSessionId);
+            setSessionIdRef.current(activeSessionId);
             if (user?.id) {
               saveCurrentSessionId(user.id, activeSessionId);
             }
@@ -226,14 +234,14 @@ export default function Home() {
         } else {
           // Reload but no existing sessions - create temporary
           if (isMounted) {
-            startNewChat();
+            startNewChatRef.current();
           }
         }
       } catch (error) {
         console.error("Failed to initialize sessions:", error);
         // Create temporary session on error
         if (isMounted) {
-          startNewChat();
+          startNewChatRef.current();
         }
       }
     };
@@ -250,8 +258,6 @@ export default function Home() {
     isInitialized,
     loadUserSessions,
     hydrateSessionTitles,
-    startNewChat,
-    setSessionId,
   ]);
 
   // Initialize user in backend
