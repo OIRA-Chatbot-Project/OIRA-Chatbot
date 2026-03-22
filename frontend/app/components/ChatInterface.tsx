@@ -52,6 +52,40 @@ const SUGGESTED_QUESTION_GROUPS = {
   ],
 } as const
 
+/** Category cards shown on the empty/welcome state, each linking to a representative question. */
+const CATEGORY_CARDS = [
+  {
+    icon: 'calendar_today',
+    label: 'Course Planning',
+    question: 'How can I plan my next semester around my major requirements?',
+  },
+  {
+    icon: 'checklist',
+    label: 'Major Requirements',
+    question: 'What are the requirements for the Computer Science major?',
+  },
+  {
+    icon: 'auto_stories',
+    label: 'Courses & Prereqs',
+    question: 'What are the prerequisites for MATH 245?',
+  },
+  {
+    icon: 'assignment',
+    label: 'Registration',
+    question: 'What should I know about course registration and withdrawal?',
+  },
+  {
+    icon: 'workspace_premium',
+    label: 'Graduation',
+    question: 'What are the requirements to graduate?',
+  },
+  {
+    icon: 'swap_horiz',
+    label: 'Transfer Credit',
+    question: 'How does transfer credit work?',
+  },
+] as const
+
 /**
  * Returns a new array with the same elements in a random order (Fisher-Yates shuffle).
  *
@@ -902,7 +936,7 @@ export default function ChatInterface({
         <div className="min-w-0">
           <p className="text-xs uppercase tracking-[0.3em] text-primary">Bucknell</p>
           <h1
-            className={`text-2xl sm:text-3xl font-semibold ${
+            className={`heading-serif text-2xl sm:text-3xl ${
               theme === 'dark' ? 'text-white' : 'text-secondary'
             }`}
           >
@@ -1106,42 +1140,66 @@ export default function ChatInterface({
         }`}
       >
         {messages.length === 0 && !isLoading && !isLoadingHistory && (
-          <div className="flex flex-col items-center justify-center min-h-full text-center py-8">
-            <div className="max-w-2xl px-4">
-              <h2
-                className={`text-xl sm:text-2xl font-semibold mb-3 ${
-                  theme === 'dark' ? 'text-gray-100' : 'text-gray-700'
-                }`}
-              >
-                Welcome to the Bucknell Course Catalog Assistant! 👋
-              </h2>
-              <p className={`mb-4 text-sm sm:text-base ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
-                I can help with Bucknell course catalog details and official academic policies.
-              </p>
-              <div
-                className={`text-left rounded-2xl p-5 space-y-2 ${
-                  theme === 'dark'
-                    ? 'bg-slate-900/60 text-gray-100 border border-slate-800'
-                    : 'bg-white text-gray-700 border border-gray-100 shadow'
-                }`}
-              >
-                <p className="text-sm font-semibold">Try asking one of these:</p>
-                <div className="grid gap-2">
-                  {suggestedQuestions.map((question) => (
-                    <button
-                      key={question}
-                      type="button"
-                      onClick={() => sendMessage(question)}
-                      className={`w-full rounded-2xl border px-4 py-3 text-left text-sm transition-colors ${
-                        theme === 'dark'
-                          ? 'border-slate-700 bg-slate-950/40 hover:border-slate-500 hover:bg-slate-900'
-                          : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-slate-50'
+          <div className="flex flex-col items-center justify-center min-h-full text-center py-12">
+            <div className="max-w-2xl w-full px-4">
+              {/* Identity header */}
+              <div className="welcome-header mb-9">
+                <p className="text-xs uppercase tracking-[0.35em] font-medium text-primary mb-2">
+                  Bucknell University
+                </p>
+                <h2
+                  className={`heading-serif text-3xl sm:text-4xl leading-tight mb-3 ${
+                    theme === 'dark' ? 'text-gray-100' : 'text-secondary'
+                  }`}
+                >
+                  Course Catalog Assistant
+                </h2>
+                <p
+                  className={`text-sm sm:text-base max-w-sm mx-auto leading-relaxed ${
+                    theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
+                  }`}
+                >
+                  Ask about courses, majors, requirements, and academic policies.
+                </p>
+              </div>
+
+              {/* Category cards */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-left">
+                {CATEGORY_CARDS.map((cat, i) => (
+                  <button
+                    key={cat.label}
+                    type="button"
+                    onClick={() => sendMessage(cat.question)}
+                    style={{ animationDelay: `${80 + i * 55}ms` }}
+                    className={`welcome-card group rounded-2xl p-4 border transition-all duration-200 text-left hover:-translate-y-0.5 ${
+                      theme === 'dark'
+                        ? 'border-slate-700 bg-slate-900/50 hover:border-primary/50 hover:bg-slate-800/70'
+                        : 'border-gray-100 bg-white shadow-sm hover:border-primary/40 hover:shadow-md'
+                    }`}
+                  >
+                    <span
+                      className={`material-symbols-outlined text-[20px] mb-2.5 block ${
+                        theme === 'dark' ? 'text-orange-300' : 'text-primary'
                       }`}
                     >
-                      {question}
-                    </button>
-                  ))}
-                </div>
+                      {cat.icon}
+                    </span>
+                    <p
+                      className={`text-sm font-semibold mb-1 ${
+                        theme === 'dark' ? 'text-gray-200' : 'text-gray-800'
+                      }`}
+                    >
+                      {cat.label}
+                    </p>
+                    <p
+                      className={`text-xs leading-relaxed line-clamp-2 ${
+                        theme === 'dark' ? 'text-gray-500' : 'text-gray-500'
+                      }`}
+                    >
+                      {cat.question}
+                    </p>
+                  </button>
+                ))}
               </div>
             </div>
           </div>
@@ -1176,9 +1234,9 @@ export default function ChatInterface({
               }`}
             >
               <div className="flex items-center gap-1.5 px-1">
-                <div className="thinking-dot w-2.5 h-2.5 rounded-full bg-gray-400"></div>
-                <div className="thinking-dot w-2.5 h-2.5 rounded-full bg-gray-400"></div>
-                <div className="thinking-dot w-2.5 h-2.5 rounded-full bg-gray-400"></div>
+                <div className={`thinking-dot w-2.5 h-2.5 rounded-full ${theme === 'dark' ? 'bg-orange-400/70' : 'bg-primary/70'}`}></div>
+                <div className={`thinking-dot w-2.5 h-2.5 rounded-full ${theme === 'dark' ? 'bg-orange-400/70' : 'bg-primary/70'}`}></div>
+                <div className={`thinking-dot w-2.5 h-2.5 rounded-full ${theme === 'dark' ? 'bg-orange-400/70' : 'bg-primary/70'}`}></div>
               </div>
             </div>
           </div>

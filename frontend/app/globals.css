@@ -18,15 +18,22 @@
 
 body {
   color: rgb(var(--foreground-rgb));
-  background: radial-gradient(circle at top, #fdfbff 0%, #f3f4f7 40%, #e9ecf3 100%);
-  font-family: 'Inter', 'SF Pro Display', 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  background: radial-gradient(ellipse at 60% 0%, #fff5ec 0%, #faf8f4 35%, #f0ede7 100%);
+  font-family: var(--font-sans), 'Segoe UI', system-ui, -apple-system, sans-serif;
   min-height: 100vh;
   transition: background 0.3s ease, color 0.3s ease;
 }
 
 body[data-theme='dark'] {
-  background: radial-gradient(circle at 20% 20%, #1f2a44, #0f172a 60%, #050910 100%);
+  background: radial-gradient(ellipse at 20% 10%, #1e2a40, #0f172a 55%, #060c18 100%);
   color: #f8fafc;
+}
+
+/* Serif heading utility — Lora for academic authority */
+.heading-serif {
+  font-family: var(--font-serif), Georgia, serif;
+  font-weight: 600;
+  letter-spacing: -0.01em;
 }
 
 /* Custom scrollbar */
@@ -125,10 +132,15 @@ body[data-theme='dark'] .scrollbar-thin::-webkit-scrollbar-thumb:hover {
   font-size: 0.85em;
 }
 
+body[data-theme='dark'] .markdown-content code {
+  background-color: rgba(255, 255, 255, 0.08);
+  color: #e2e8f0;
+}
+
 /* Thinking bubble animation for chatbot loading state */
 @keyframes thinking-dot {
-  0%, 60%, 100% { transform: scale(0.6); opacity: 0.35; }
-  30%           { transform: scale(1);   opacity: 1;    }
+  0%, 60%, 100% { transform: scale(0.6); opacity: 0.3; }
+  30%           { transform: scale(1);   opacity: 1;   }
 }
 
 .thinking-dot {
@@ -137,6 +149,20 @@ body[data-theme='dark'] .scrollbar-thin::-webkit-scrollbar-thumb:hover {
 .thinking-dot:nth-child(1) { animation-delay: 0s;   }
 .thinking-dot:nth-child(2) { animation-delay: 0.2s; }
 .thinking-dot:nth-child(3) { animation-delay: 0.4s; }
+
+/* Welcome screen entrance animations */
+@keyframes welcome-fade-up {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0);    }
+}
+
+.welcome-header {
+  animation: welcome-fade-up 0.45s ease both;
+}
+
+.welcome-card {
+  animation: welcome-fade-up 0.4s ease both;
+}
 
 /* Google Material Symbols icon defaults */
 .material-symbols-outlined {
