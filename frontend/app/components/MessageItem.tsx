@@ -300,8 +300,8 @@ export default function MessageItem({
           className={`rounded-[22px] px-5 py-4 backdrop-blur ${
             isUser
               ? theme === 'dark'
-                ? 'bg-gradient-to-r from-indigo-500 via-blue-500 to-sky-500 text-white shadow-lg shadow-blue-900/40'
-                : 'bg-gradient-to-r from-secondary to-blue-500 text-white shadow-xl shadow-blue-200/50'
+                ? 'bg-secondary/90 text-white shadow-lg shadow-secondary/30'
+                : 'bg-secondary text-white shadow-lg shadow-secondary/20'
               : theme === 'dark'
                 ? 'bg-slate-900/60 text-gray-100 shadow-xl shadow-black/40 border border-slate-800'
                 : 'bg-white/90 text-gray-900 shadow-lg shadow-gray-200/60 border border-white/70'

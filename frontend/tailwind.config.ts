@@ -12,6 +12,10 @@ const config: Config = {
         primary: '#E87722', // Bucknell Orange
         secondary: '#003865', // Bucknell Blue
       },
+      fontFamily: {
+        sans: ['var(--font-sans)', 'system-ui', 'sans-serif'],
+        serif: ['var(--font-serif)', 'Georgia', 'serif'],
+      },
     },
   },
   plugins: [],
