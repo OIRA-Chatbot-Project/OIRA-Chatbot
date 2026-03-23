@@ -77,7 +77,9 @@ class ChatbotService:
         name = os.path.basename(path)
         return name.replace("_", " ")
 
-    def _classify_question(self, question: str) -> str:
+    def _classify_question(
+        self, question: str, conversation_history: Optional[List[Dict[str, str]]] = None
+    ) -> str:
         """Classify a question as 'course_catalog', 'academic_policy', or 'off_topic'.
 
         This pre-retrieval classification allows us to:
@@ -86,16 +88,17 @@ class ChatbotService:
 
         Args:
             question: The user's question
+            conversation_history: Optional prior turns for follow-up context.
 
         Returns:
             str: One of 'course_catalog', 'academic_policy', 'off_topic', 'greeting',
             'thank_you', or 'clarification_needed'. Falls back to 'course_catalog' on error.
         """
         if not config.ENABLE_OFF_TOPIC_DETECTION:
-            # Classification disabled - default to catalog
             return "course_catalog"
 
-        classifier_prompt = get_question_classifier_prompt(question)
+        history_text = self._format_history_context(conversation_history or [])
+        classifier_prompt = get_question_classifier_prompt(question, history_text)
 
         try:
             response = self.classifier_llm.invoke(classifier_prompt)
@@ -112,6 +115,11 @@ class ChatbotService:
 
                 # Validate category
                 if category in ["course_catalog", "academic_policy", "off_topic", "greeting", "thank_you", "clarification_needed"]:
+                    # Deterministic guard: a short follow-up in an active conversation
+                    # should never be treated as clarification_needed.
+                    if category == "clarification_needed" and conversation_history:
+                        print(f"[CLASSIFICATION] 'clarification_needed' overridden to 'course_catalog' (active conversation)")
+                        return "course_catalog"
                     print(f"[CLASSIFICATION] Question classified as: {category}")
                     return category
                 else:
@@ -654,17 +662,24 @@ class ChatbotService:
             bool: True if it appears to be a sequence question.
         """
         q = question.lower()
-        return any(
-            key in q
-            for key in (
-                "sequence",
-                "four-year",
-                "four year",
-                "plan",
-                "recommended sequence",
-                "curriculum",
-            )
+
+        # Direct sequence/plan language.
+        direct_markers = (
+            "sequence",
+            "four-year",
+            "four year",
+            "plan",
+            "recommended sequence",
+            "curriculum",
+            "roadmap",
         )
+        if any(key in q for key in direct_markers):
+            return True
+
+        # Schedule-by-year phrasing should also trigger sequence enrichment.
+        year_markers = ("first year", "sophomore", "junior", "senior")
+        schedule_markers = ("schedule", "semester", "fall", "spring", "what should i take")
+        return any(y in q for y in year_markers) and any(s in q for s in schedule_markers)
 
     def _expand_sequence_queries(self, base_query: str, question: str) -> List[str]:
         """Expand sequence-style questions with related retrieval queries.
@@ -897,7 +912,7 @@ class ChatbotService:
                 - followups (List[str]): List of follow-up questions.
         """
         # STEP 1: Classify the question
-        question_category = self._classify_question(question)
+        question_category = self._classify_question(question, conversation_history)
 
         # STEP 2: Handle conversational responses (greeting, thanks, clarification, off_topic)
         conv_response = self._get_llm_conversational_response(question_category, question, conversation_history)
@@ -1145,7 +1160,7 @@ class ChatbotService:
             Tuple[str, List[Dict], str, List[str]]: (answer, citations, question_category, followups).
         """
         # STEP 1 & 2: Run classification and contextualization in parallel
-        classify_task = asyncio.to_thread(self._classify_question, question)
+        classify_task = asyncio.to_thread(self._classify_question, question, conversation_history)
         context_task = asyncio.to_thread(self._build_contextual_query, question, conversation_history)
 
         results = await asyncio.gather(classify_task, context_task, return_exceptions=True)
@@ -1364,7 +1379,7 @@ class ChatbotService:
         import json as _json
 
         # STEP 1: Parallel classification + contextualization
-        classify_task = asyncio.to_thread(self._classify_question, question)
+        classify_task = asyncio.to_thread(self._classify_question, question, conversation_history)
         context_task = asyncio.to_thread(self._build_contextual_query, question, conversation_history)
         results = await asyncio.gather(classify_task, context_task, return_exceptions=True)
 
@@ -1435,6 +1450,10 @@ class ChatbotService:
                     boosted_docs.extend(boost)
                 if boosted_docs:
                     docs = self._merge_docs(docs, boosted_docs)
+
+            # Keep parity with non-streaming paths: enrich sequence questions
+            # with course-entry chunks so per-course credits are easier to cite.
+            docs = self._enrich_with_course_entries(docs, question)
 
             if not docs:
                 fallback = (

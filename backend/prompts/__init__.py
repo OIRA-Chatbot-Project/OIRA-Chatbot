@@ -149,7 +149,7 @@ def get_contextualize_prompt(question: str, history_text: str) -> str:
     return _CONTEXTUALIZE_TPL.substitute(question=question, history_text=history_text)
 
 
-def get_question_classifier_prompt(question: str) -> str:
+def get_question_classifier_prompt(question: str, history_text: str = "") -> str:
     """
     Generate prompt for classifying question type before retrieval.
 
@@ -160,11 +160,17 @@ def get_question_classifier_prompt(question: str) -> str:
 
     Args:
         question: The user's question
+        history_text: Optional formatted conversation history for follow-up context.
 
     Returns:
         Prompt string instructing the LLM to return JSON with classification
     """
-    return _CLASSIFIER_TPL.substitute(question=question)
+    history_section = (
+        f"CONVERSATION HISTORY (last few turns):\n{history_text}\n"
+        if history_text
+        else ""
+    )
+    return _CLASSIFIER_TPL.substitute(question=question, history_section=history_section)
 
 
 CONVERSATIONAL_SYSTEM_PROMPT: str = (

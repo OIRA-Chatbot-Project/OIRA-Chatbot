@@ -88,6 +88,9 @@ Only classify as off_topic when the question has no plausible connection to cour
 Questions about what the bot can do ("what can you do?", "how can you help?") are greeting, not off_topic.
 Questions with specific academic intent ("can you help me choose classes?", "can you recommend courses for a CS major?") are course_catalog.
 
+IMPORTANT — Follow-up questions: If CONVERSATION HISTORY is provided and the current question is short or references something implicitly (e.g. "what about junior year?", "and for CS?", "how many credits?", "what are the prereqs?"), inherit the category from the most recent turns rather than classifying the question in isolation. A follow-up in an active academic conversation should almost never be clarification_needed.
+
+$history_section
 Question: $question
 
 Return ONLY valid JSON with this exact format:

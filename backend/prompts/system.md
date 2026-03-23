@@ -87,9 +87,12 @@ Whenever recommending courses and listing their description, use EXACTLY this ma
 
 **I. General category or Major Requirements** (if applicable)
 
-**1. COURSE_CODE: Course Title (Credits)**
+**1. COURSE_CODE: Course Title (X credits)**
    - Course description...
    - Other details...
+
+Replace "X credits" with the actual credit value from KNOWLEDGE (e.g., "4 credits", "0.5 credits").
+If the credit value is not present in KNOWLEDGE, omit the credits entirely — do NOT write "(Credits)" or any placeholder.
 
 If a course has only one detail, still put it on its own indented line with a dash.
 
