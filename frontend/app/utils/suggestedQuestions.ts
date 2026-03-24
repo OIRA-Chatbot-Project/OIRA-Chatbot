@@ -1,7 +1,7 @@
 export const SUGGESTED_QUESTION_GROUPS = {
   planning: [
     "I'm a rising sophomore interested in Computer Science. I already took CSCI 203. What courses should I take in my Fall semester?",
-    'How can I plan my next semester around my major requirements?',
+    'How can I plan my next year as a Computer Science sophomore?',
     "What should I take in my first semester if I'm undecided?",
   ],
   requirements: [
@@ -21,7 +21,6 @@ export const SUGGESTED_QUESTION_GROUPS = {
     'What does the attendance policy say?',
   ],
   graduation: [
-    'What are the requirements to graduate?',
     'What academic standing rules should students know about?',
     'What happens if I fail a class?',
     'Is it possible to receive a second degree? How can I get my second degree?',
@@ -33,7 +32,7 @@ export const SUGGESTED_QUESTION_GROUPS = {
     'Can I get credit from IB, Cambridge, or CLEP exams?',
   ],
   academicProcesses: [
-    'How do I declare a minor?',
+    'How do I declare a minor in Dance?',
     'How do I appeal a grade?',
     'What is the grade replacement policy?',
     'I want to drop one course with 0.5 credit. How will the drop affect me?',

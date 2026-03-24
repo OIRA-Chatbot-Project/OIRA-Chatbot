@@ -13,34 +13,34 @@ import { SUGGESTED_QUESTION_GROUPS } from '../utils/suggestedQuestions'
 /** Category cards shown on the empty/welcome state, each linking to a representative question. */
 const CATEGORY_CARDS = [
   {
+    group: 'planning',
     icon: 'calendar_today',
     label: 'Course Planning',
-    question: 'How can I plan my next semester around my major requirements?',
   },
   {
+    group: 'requirements',
     icon: 'checklist',
     label: 'Major Requirements',
-    question: 'What are the requirements for the Computer Science major?',
   },
   {
+    group: 'course_specific',
     icon: 'auto_stories',
     label: 'Courses & Prereqs',
-    question: 'What are the prerequisites for MATH 245?',
   },
   {
+    group: 'registration',
     icon: 'assignment',
     label: 'Registration',
-    question: 'What should I know about course registration and withdrawal?',
   },
   {
+    group: 'graduation',
     icon: 'workspace_premium',
     label: 'Graduation',
-    question: 'What are the requirements to graduate?',
   },
   {
+    group: 'credit',
     icon: 'swap_horiz',
     label: 'Transfer Credit',
-    question: 'How does transfer credit work?',
   },
 ] as const
 
@@ -70,6 +70,14 @@ const buildSuggestedQuestions = () => {
     const [question] = shuffle([...group])
     return question
   }))
+}
+
+const buildCategoryCards = () => {
+  return CATEGORY_CARDS.map((card) => {
+    const group = SUGGESTED_QUESTION_GROUPS[card.group]
+    const [question] = shuffle([...group])
+    return { ...card, question }
+  })
 }
 
 interface ChatInterfaceProps {
@@ -125,6 +133,7 @@ export default function ChatInterface({
   const [isUploadingSchedule, setIsUploadingSchedule] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>(() => buildSuggestedQuestions())
+  const [categoryCards, setCategoryCards] = useState(() => buildCategoryCards())
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   /**
@@ -152,6 +161,7 @@ export default function ChatInterface({
     // Load conversation history when session changes
     loadConversationHistory()
     setSuggestedQuestions(buildSuggestedQuestions())
+    setCategoryCards(buildCategoryCards())
     setUploadError(null)
     setIsUploadingSchedule(false)
     if (fileInputRef.current) {
@@ -1123,7 +1133,7 @@ export default function ChatInterface({
 
               {/* Category cards */}
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-left">
-                {CATEGORY_CARDS.map((cat, i) => (
+                {categoryCards.map((cat, i) => (
                   <button
                     key={cat.label}
                     type="button"
