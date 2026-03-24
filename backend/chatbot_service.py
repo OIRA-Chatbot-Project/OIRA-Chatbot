@@ -267,6 +267,41 @@ class ChatbotService:
             return self._merge_docs(docs, extra_docs)
         return docs
 
+    def _augment_management_plan_docs(self, docs: List, question: str, search_query: str) -> List:
+        """Force-include Freeman/BSBA-wide requirement chunks for management plan questions.
+
+        Semantic search often over-indexes on the major-specific suggested plan and
+        under-retrieves the college-wide BSBA requirements. For full management plan
+        questions, add those requirement chunks explicitly.
+        """
+        if not docs or not self._is_sequence_question(question):
+            return docs
+        if not self._is_management_major_query(f"{search_query} {question}"):
+            return docs
+
+        augmentation_queries = [
+            "Freeman College Core Requirements",
+            "Freeman College of Management General Education Curriculum",
+            "BSBA degree requirements",
+            "FOUNDATIONAL LITERACY REQUIREMENTS",
+            "MANAGERIAL LITERACY REQUIREMENTS",
+            "Analytics & Operations Management Suggested Plan of Study Freeman Core Courses",
+        ]
+
+        extra_docs = []
+        for query in augmentation_queries:
+            found = self.vector_store.similarity_search(
+                query,
+                k=2,
+                filter={"doc_type": "catalog"},
+            )
+            if found:
+                extra_docs.extend(found)
+
+        if extra_docs:
+            return self._merge_docs(docs, extra_docs)
+        return docs
+
     def _dedupe_citations(self, citations: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Remove duplicate citations while preserving order.
 
@@ -681,6 +716,25 @@ class ChatbotService:
         schedule_markers = ("schedule", "semester", "fall", "spring", "what should i take")
         return any(y in q for y in year_markers) and any(s in q for s in schedule_markers)
 
+    def _is_management_major_query(self, text: str) -> bool:
+        """Detect Freeman College / BSBA major references in the query text."""
+        q = text.lower()
+        management_markers = (
+            "freeman",
+            "management college",
+            "college of management",
+            "bsba",
+            "business analytics", "anop",
+            "accounting",
+            "finance",
+            "acfm",
+            "mors", "mgmt",
+            "management and organizations",
+            "markets, innovation & design", "mide",
+            "markets innovation and design",
+        )
+        return any(marker in q for marker in management_markers)
+
     def _expand_sequence_queries(self, base_query: str, question: str) -> List[str]:
         """Expand sequence-style questions with related retrieval queries.
 
@@ -702,9 +756,13 @@ class ChatbotService:
             "culminating experience",
         ]
 
-        q_lower = question.lower()
-        if "freeman" in q_lower or "business analytics" in q_lower or "bsba" in q_lower:
-            expansions.append("Freeman College core curriculum")
+        if self._is_management_major_query(f"{base_query} {question}"):
+            expansions.extend([
+                "Freeman College core curriculum",
+                "BSBA core requirements",
+                "Freeman College of Management general education curriculum",
+                "BSBA degree requirements",
+            ])
 
         # De-duplicate while preserving order
         seen = set()
@@ -714,6 +772,30 @@ class ChatbotService:
                 seen.add(q)
                 deduped.append(q)
         return deduped
+
+    def _prioritize_sequence_queries(
+        self,
+        sub_questions: List[str],
+        search_query: str,
+        question: str,
+        max_queries: int = 8,
+    ) -> List[str]:
+        """Keep sequence-specific retrieval queries from being truncated away.
+
+        For plan questions, the sequence expansions are often more important than
+        generic decomposed sub-questions. Put them first, then append any remaining
+        sub-questions, de-duplicated and capped.
+        """
+        prioritized = self._expand_sequence_queries(search_query, question) + sub_questions
+        seen = set()
+        ordered: List[str] = []
+        for query in prioritized:
+            if query not in seen:
+                seen.add(query)
+                ordered.append(query)
+            if len(ordered) >= max_queries:
+                break
+        return ordered
 
     async def _summarize_conversation(
         self,
@@ -963,11 +1045,9 @@ class ChatbotService:
 
                 # Expand sequence questions for broader recall
                 if question_category == "course_catalog" and self._is_sequence_question(question):
-                    expanded = self._expand_sequence_queries(search_query, question)
-                    sub_questions = sub_questions + expanded
-                    # Cap to avoid over-fetching
-                    if len(sub_questions) > 8:
-                        sub_questions = sub_questions[:8]
+                    sub_questions = self._prioritize_sequence_queries(
+                        sub_questions, search_query, question, max_queries=8
+                    )
 
                 # Retrieve documents for all sub-questions WITH FILTERING
                 docs = self._retrieve_for_subqueries(sub_questions, doc_type_filter)
@@ -1003,6 +1083,8 @@ class ChatbotService:
                     docs = self._merge_docs(docs, boosted_docs)
                     print(f"[INFO] Boosted docs added: {len(boosted_docs)}")
                     print(f"[INFO] Retrieved docs (after boost): {len(docs)}")
+
+            docs = self._augment_management_plan_docs(docs, question, search_query)
 
             # Enrich sequence questions with course-entry chunks (titles/descriptions)
             docs = self._enrich_with_course_entries(docs, question)
@@ -1224,10 +1306,9 @@ class ChatbotService:
 
                 # Expand sequence questions
                 if question_category == "course_catalog" and self._is_sequence_question(question):
-                    expanded = self._expand_sequence_queries(search_query, question)
-                    sub_questions = sub_questions + expanded
-                    if len(sub_questions) > 8:
-                        sub_questions = sub_questions[:8]
+                    sub_questions = self._prioritize_sequence_queries(
+                        sub_questions, search_query, question, max_queries=8
+                    )
 
                 # STEP 4: Parallel retrieval
                 docs = await self._retrieve_for_subqueries_async(sub_questions, doc_type_filter)
@@ -1263,6 +1344,8 @@ class ChatbotService:
                     docs = self._merge_docs(docs, boosted_docs)
                     print(f"[INFO] Boosted docs added: {len(boosted_docs)}")
                     print(f"[INFO] Retrieved docs (after boost): {len(docs)}")
+
+            docs = self._augment_management_plan_docs(docs, question, search_query)
 
             # Enrich sequence questions with course-entry chunks (titles/descriptions)
             docs = self._enrich_with_course_entries(docs, question)
@@ -1421,10 +1504,9 @@ class ChatbotService:
                 sub_questions = await asyncio.to_thread(self._decompose_query, search_query)
 
                 if question_category == "course_catalog" and self._is_sequence_question(question):
-                    expanded = self._expand_sequence_queries(search_query, question)
-                    sub_questions = sub_questions + expanded
-                    if len(sub_questions) > 8:
-                        sub_questions = sub_questions[:8]
+                    sub_questions = self._prioritize_sequence_queries(
+                        sub_questions, search_query, question, max_queries=8
+                    )
 
                 docs = await self._retrieve_for_subqueries_async(sub_questions, doc_type_filter)
             else:
@@ -1450,6 +1532,8 @@ class ChatbotService:
                     boosted_docs.extend(boost)
                 if boosted_docs:
                     docs = self._merge_docs(docs, boosted_docs)
+
+            docs = self._augment_management_plan_docs(docs, question, search_query)
 
             # Keep parity with non-streaming paths: enrich sequence questions
             # with course-entry chunks so per-course credits are easier to cite.
