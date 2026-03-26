@@ -134,7 +134,7 @@ async def generate_session_title(
 
         llm = ChatOpenAI(
             api_key=settings.llm.OPENAI_API_KEY,
-            model="gpt-4o-mini",
+            model=settings.llm.OPENAI_LIGHT_MODEL,
             temperature=0.7
         )
 
