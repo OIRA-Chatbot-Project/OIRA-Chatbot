@@ -1,14 +1,9 @@
 """
 Main application entry point for the OIRA Chatbot API.
-
-This module initializes the FastAPI application, sets up middleware (CORS),
-configures database initialization on startup, and includes all application routers.
 """
 import sys
 import os
 
-# Force UTF-8 encoding for stdout/stderr on Windows to prevent
-# 'charmap' codec errors when printing Unicode characters from LLM output
 if sys.platform == "win32":
     os.environ.setdefault("PYTHONUTF8", "1")
     if hasattr(sys.stdout, "reconfigure"):
@@ -18,64 +13,49 @@ if sys.platform == "win32":
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-
-import config
-from database import init_db
-from models import HealthResponse
-
-# Import route modules
-from routes import users, sessions, messages, chat, feedback, schedule, admin
-
-# Initialize FastAPI app
-app = FastAPI(
-    title=config.API_TITLE,
-    description=config.API_DESCRIPTION,
-    version=config.API_VERSION
-)
-
-# Add CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=config.ALLOWED_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Initialize database on startup
-@app.on_event("startup")
-async def startup_event():
-    """Initialize database tables on startup.
-
-    This function is called when the application starts. It triggers the
-    creation of all database tables defined in the SQLAlchemy models.
-    """
-    init_db()
-    print("Database initialized successfully")
+from core.settings import settings
+from infra.db.engine import init_db
+from api.schemas import HealthResponse
 
 
-@app.get("/", response_model=HealthResponse)
-async def root():
-    """Health check endpoint.
-
-    Returns:
-        HealthResponse: A response object containing the status and version of the API.
-    """
-    return HealthResponse(
-        status="healthy",
-        version=config.API_VERSION
+def create_app() -> FastAPI:
+    """Create and configure the FastAPI application."""
+    app = FastAPI(
+        title=settings.app.API_TITLE,
+        description=settings.app.API_DESCRIPTION,
+        version=settings.app.API_VERSION,
     )
 
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.app.ALLOWED_ORIGINS,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
-# Include all routers
-app.include_router(users.router)
-app.include_router(sessions.router)
-app.include_router(messages.router)
-app.include_router(chat.router)
-app.include_router(feedback.router)
-app.include_router(schedule.router)
-app.include_router(admin.router)
+    @app.on_event("startup")
+    async def startup_event():
+        init_db()
+        print("Database initialized successfully")
 
+    @app.get("/", response_model=HealthResponse)
+    async def root():
+        return HealthResponse(status="healthy", version=settings.app.API_VERSION)
+
+    from api.routers import users, sessions, messages, chat, feedback, schedule, admin
+    app.include_router(users.router)
+    app.include_router(sessions.router)
+    app.include_router(messages.router)
+    app.include_router(chat.router)
+    app.include_router(feedback.router)
+    app.include_router(schedule.router)
+    app.include_router(admin.router)
+
+    return app
+
+
+app = create_app()
 
 if __name__ == "__main__":
     import uvicorn

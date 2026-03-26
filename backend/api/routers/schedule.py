@@ -1,0 +1,120 @@
+"""
+Schedule processing routes.
+"""
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from sqlalchemy.orm import Session
+import re
+import json
+from datetime import datetime
+
+from infra.db.engine import get_db
+from infra.db.models import Session as DBSession, User as DBUser, Message as DBMessage
+from api.schemas import ScheduleUploadResponse, Citation, ParsedCourse
+from auth import get_current_user, get_user_id_from_token
+from core.container import get_chatbot_service
+from schedule_parser import extract_text_from_upload, parse_schedule_entries, summarize_schedule
+
+router = APIRouter(prefix="/schedule", tags=["schedule"])
+
+
+@router.post("/upload", response_model=ScheduleUploadResponse)
+async def upload_schedule(
+    session_id: str = Form(...),
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Process a student's schedule upload and provide course recommendations."""
+    try:
+        clerk_user_id = get_user_id_from_token(current_user)
+
+        user = db.query(DBUser).filter(DBUser.clerk_user_id == clerk_user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found. Please sign up first.")
+
+        session = db.query(DBSession).filter(DBSession.session_id == session_id).first()
+        if not session:
+            session = DBSession(session_id=session_id, user_id=user.id)
+            db.add(session)
+            db.commit()
+        else:
+            if session.user_id != user.id:
+                raise HTTPException(status_code=403, detail="Session does not belong to user")
+            session.updated_at = datetime.now(datetime.UTC) if hasattr(datetime, 'UTC') else datetime.utcnow()
+            db.commit()
+
+        contents = await file.read()
+        if not contents:
+            raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+
+        try:
+            raw_text = extract_text_from_upload(contents, file.filename)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+        parsed_courses = parse_schedule_entries(raw_text)
+        if not parsed_courses:
+            raise HTTPException(
+                status_code=400,
+                detail="Could not detect any courses in the uploaded schedule. Please try a clearer image or a text export."
+            )
+        summary = summarize_schedule(parsed_courses)
+
+        user_message = DBMessage(
+            session_id=session_id,
+            role="user",
+            content=f"Schedule uploaded:\n{summary}"
+        )
+        db.add(user_message)
+        db.commit()
+        db.refresh(user_message)
+
+        history_messages = db.query(DBMessage).filter(
+            DBMessage.session_id == session_id,
+            DBMessage.id < user_message.id
+        ).order_by(DBMessage.created_at.desc()).limit(6).all()
+
+        conversation_history = [
+            {"role": msg.role, "content": msg.content}
+            for msg in reversed(history_messages)
+        ]
+
+        chatbot = get_chatbot_service()
+        answer, citations, question_category, followups = chatbot.recommend_courses_from_schedule(summary, conversation_history)
+
+        try:
+            cleaned_answer = re.sub(r"\[[^\]]+?,\s*p\.\s*\d+\]", "", answer)
+            cleaned_answer = re.sub(r"\n{3,}", "\n\n", cleaned_answer)
+            cleaned_answer = re.sub(r"[ \t]{2,}", " ", cleaned_answer)
+            cleaned_answer = cleaned_answer.strip()
+        except Exception:
+            cleaned_answer = answer
+
+        assistant_message = DBMessage(
+            session_id=session_id,
+            role='assistant',
+            content=cleaned_answer,
+            citations=json.dumps(citations)
+        )
+        db.add(assistant_message)
+        db.commit()
+        db.refresh(assistant_message)
+
+        citation_objects = [Citation(**c) for c in citations]
+
+        return ScheduleUploadResponse(
+            message_id=assistant_message.id,
+            answer=answer,
+            citations=citation_objects,
+            session_id=session_id,
+            schedule_summary=summary,
+            parsed_courses=[ParsedCourse(**course) for course in parsed_courses],
+            schedule_message_id=user_message.id,
+            question_category=question_category,
+            follow_ups=followups
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error processing schedule: {str(e)}")
