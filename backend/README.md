@@ -4,46 +4,58 @@ FastAPI backend for the Bucknell University course catalog chatbot.
 
 ## What this service does
 
-- Provides the HTTP API used by the frontend chat UI
-- Implements RAG (Retrieval-Augmented Generation):
-  - Ingests PDFs / Google Docs content
-  - Creates embeddings using OpenAI
-  - Stores embeddings in ChromaDB
-  - Retrieves relevant chunks during chat
-- Persists sessions, messages, and feedback in SQLite (via SQLAlchemy)
+- Exposes the HTTP API used by the frontend chat UI
+- Implements RAG (Retrieval-Augmented Generation)
+- Ingests PDFs and optional Google Docs content
+- Stores embeddings in ChromaDB and app data in SQLite
+- Supports session history, feedback, and schedule parsing
+
+## Current structure
+
+```text
+backend/
+  core/       # config, database setup, models, auth helpers
+  routes/     # FastAPI route modules
+  services/   # chat, schedule, and Google Docs logic
+  scripts/    # ingestion, migrations, setup checks
+  prompts/    # prompt templates used by the backend
+  tests/      # backend tests
+  data/       # source documents and Google Docs CSV/cache
+  main.py     # FastAPI app entry point
+```
 
 ## Tech stack
 
 - FastAPI + Uvicorn
 - SQLAlchemy + SQLite
 - LangChain + ChromaDB
-- OpenAI (chat + embeddings)
+- OpenAI chat + embeddings
 - Optional OCR support (Tesseract via `pytesseract`) for schedule image uploads
 
 ## Prerequisites
 
 - Python 3.8+
 - OpenAI API key
-- (Optional) Tesseract OCR binary if using schedule image uploads
+- Optional: Tesseract OCR if using schedule image uploads
 
 ### Install Tesseract (optional)
 
 - macOS: `brew install tesseract`
 - Ubuntu/Debian: `sudo apt-get update && sudo apt-get install -y tesseract-ocr`
-- Windows: UB Mannheim installer + add to PATH
+- Windows: install the UB Mannheim build and add it to `PATH`
 
 ## Setup
 
-### 1) Create virtual environment
+### 1) Create a virtual environment
 
 ```bash
 python -m venv .venv
 ```
 
-Activate:
+Activate it:
 
 - macOS/Linux: `source .venv/bin/activate`
-- Windows: `.venv\\Scripts\\activate`
+- Windows: `.venv\Scripts\activate`
 
 ### 2) Install dependencies
 
@@ -53,7 +65,7 @@ pip install -r requirements.txt
 
 ### 3) Configure environment variables
 
-Copy:
+Copy the example file:
 
 ```bash
 cp .env.example .env
@@ -63,76 +75,95 @@ Minimum required:
 
 - `OPENAI_API_KEY=...`
 
-Common settings (see `.env.example` for full list):
+Common settings:
 
-- `OPENAI_MODEL` (default: `gpt-4o-mini`)
-- `EMBEDDING_MODEL` (default: `text-embedding-3-large`)
-- `DATABASE_URL` (default: sqlite)
-- `CHROMA_PATH` / `CHROMA_COLLECTION_NAME`
-- `ALLOWED_ORIGINS` (CORS; include `http://localhost:3000` for local frontend)
+- `OPENAI_MODEL` default: `gpt-4.1-mini`
+- `OPENAI_LIGHT_MODEL` default: `gpt-4.1-nano`
+- `EMBEDDING_MODEL` default: `text-embedding-3-large`
+- `DATABASE_URL` default: `sqlite:///./chatbot.db`
+- `CHROMA_PATH` and `CHROMA_COLLECTION_NAME`
+- `ALLOWED_ORIGINS` for frontend CORS
+- `GOOGLE_DOCS_CSV`, `GOOGLE_DOCS_CACHE_DIR`, `GOOGLE_DOCS_ONLY`
 
-## Ingest data (build the knowledge base)
+## Ingest data
 
 ### PDFs
 
-1. Put PDFs in `backend/data/`
+1. Put source PDFs in `data/`
 2. Run:
 
 ```bash
-python ingest_database.py
+python scripts/ingest_database.py
 ```
 
-### Google Docs (optional / supported)
+### Google Docs
 
-1. Populate `backend/data/google_docs.csv` with:
+1. Populate `data/google_docs.csv` with rows like:
 
 ```csv
 filename,doc_type,url
 2025-2026 course catalog,catalog,https://docs.google.com/document/d/<id>/edit?usp=sharing
 ```
 
-2. Ensure docs are shared with at least Viewer access
+2. Ensure the docs are shared with at least Viewer access
 3. Run:
 
 ```bash
-python ingest_database.py
+python scripts/ingest_database.py
 ```
 
 Notes:
 
-- The ingester will cache converted docs into a local cache directory (see env vars)
-- `GOOGLE_DOCS_ONLY=true` ingests only Google Docs
+- Converted Google Docs are cached under `data/google_docs_cache/`
+- `GOOGLE_DOCS_ONLY=true` ingests only Google Docs sources
+- The ingester can prefer markdown catalog exports in `data/` when present
 
 ## Run the server
 
-### Option A: run via Python
+### Option A: Python
 
 ```bash
 python main.py
 ```
 
-### Option B: run via uvicorn
+### Option B: Uvicorn
 
 ```bash
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-API docs:
+Available endpoints:
 
-- Swagger UI: http://localhost:8000/docs
+- API root: `http://localhost:8000/`
+- Swagger UI: `http://localhost:8000/docs`
 
-## Testing / diagnostics
+## Testing and diagnostics
+
+Quick environment check:
 
 ```bash
-python test_setup.py
+python scripts/test_setup.py
 ```
+
+Run tests:
+
+```bash
+pytest tests
+```
+
+Other useful scripts:
+
+- `python scripts/migrate_db.py`
+- `python scripts/add_session_title_column.py`
+- `python scripts/recreate_db.py`
 
 ## Troubleshooting
 
-- **CORS errors**
-  - Ensure `ALLOWED_ORIGINS` includes `http://localhost:3000`
-- **Chroma / retrieval issues**
-  - Re-run ingestion
-  - Confirm `CHROMA_PATH` and `CHROMA_COLLECTION_NAME` match what ingestion used
-- **OCR not working**
-  - Confirm system `tesseract` is installed and in PATH
+- Frontend cannot reach backend:
+  Confirm `ALLOWED_ORIGINS` includes `http://localhost:3000` and the backend is running.
+- Retrieval results look wrong:
+  Re-run `python scripts/ingest_database.py` and confirm `CHROMA_PATH` and `CHROMA_COLLECTION_NAME` are consistent.
+- ChromaDB directory is missing:
+  Run ingestion first to create the vector store.
+- OCR is not working:
+  Confirm the system `tesseract` binary is installed and available in `PATH`.

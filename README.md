@@ -1,103 +1,126 @@
 # OIRA Chatbot
 
-AI-powered course catalog assistant for Bucknell University.
+AI-powered Bucknell University course catalog assistant.
 
 This repository contains:
-- **Backend**: FastAPI + RAG (ChromaDB + LangChain + OpenAI) in [`backend/`](./backend)
-- **Frontend**: Next.js chat UI (with Clerk auth) in [`frontend/`](./frontend)
 
-## Quick start (recommended)
+- `backend/`: FastAPI API, RAG ingestion, SQLite persistence, ChromaDB vector store
+- `frontend/`: Next.js chat UI with Clerk-based authentication
+
+## Quick start
 
 ### 1) Configure environment variables
 
 Backend:
-- Copy `backend/.env.example` → `backend/.env`
-- Fill in at least `OPENAI_API_KEY`
-  - Optional: Clerk keys if auth is enabled/required in your deployment
+
+- Copy `backend/.env.example` to `backend/.env`
+- Set at least `OPENAI_API_KEY`
 
 Frontend:
-- Copy `frontend/.env.example` → `frontend/.env.local`
-- Set `NEXT_PUBLIC_API_URL` (default `http://localhost:8000`)
-- Add Clerk publishable/secret keys if using auth
 
-### 2) Run both services
+- Copy `frontend/.env.example` to `frontend/.env.local`
+- Set `NEXT_PUBLIC_API_URL` to `http://localhost:8000` for local development
+- Add Clerk keys if auth is enabled
 
-**Mac/Linux or Git Bash:**
+### 2) Start both services
+
+macOS/Linux or Git Bash:
+
 ```bash
 bash start.sh
 ```
 
-**Windows:**
-```bash
+Windows:
+
+```powershell
 ./start.ps1
 ```
 
-Services:
-- Frontend: http://localhost:3000
-- Backend API: http://localhost:8000
-- Backend API docs (Swagger): http://localhost:8000/docs
+Local URLs:
 
-## Manual setup (run services separately)
+- Frontend: `http://localhost:3000`
+- Backend API: `http://localhost:8000`
+- API docs: `http://localhost:8000/docs`
+
+## Run services separately
 
 ### Backend
+
 See [`backend/README.md`](./backend/README.md).
 
 Typical flow:
+
 ```bash
 cd backend
 python -m venv .venv
-source .venv/bin/activate   # or .venv\\Scripts\\activate on Windows
+source .venv/bin/activate
 pip install -r requirements.txt
-python ingest_database.py
+python scripts/ingest_database.py
 python main.py
 ```
 
 ### Frontend
+
 See [`frontend/README.md`](./frontend/README.md).
 
 Typical flow:
+
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
 
-## Key concepts
+## Repo layout
 
-### RAG ingestion lifecycle
-1. Put course catalog PDFs in `backend/data/` and/or configure Google Docs links in `backend/data/google_docs.csv`
-2. Run `python backend/ingest_database.py`
-3. Backend stores embeddings in ChromaDB and metadata in SQLite
-4. Chat endpoint retrieves relevant chunks and calls OpenAI to generate answers + citations
-
-### Sessions and feedback
-- Sessions are tracked (backend SQLite)
-- UI stores session identifiers locally and can restore previous chats
-- Users can submit thumbs up/down feedback for assistant messages
-
-## Testing / utilities
-
-Backend quick checks:
-```bash
-cd backend
-python test_setup.py
-python test_api.py
+```text
+OIRA-Chatbot/
+  backend/    # API, RAG logic, prompts, scripts, tests
+  frontend/   # Next.js app
+  start.sh    # launches backend and frontend together
+  start.ps1   # Windows startup script
 ```
 
-Inspect DB:
+## How it works
+
+### RAG ingestion lifecycle
+
+1. Put source documents in `backend/data/` and optionally configure `backend/data/google_docs.csv`
+2. Run `python backend/scripts/ingest_database.py`
+3. The backend stores embeddings in ChromaDB and metadata in SQLite
+4. Chat requests retrieve relevant chunks and generate cited answers with OpenAI
+
+### Sessions and feedback
+
+- Sessions and messages are stored in SQLite
+- The frontend keeps track of session IDs and can restore previous chats
+- Users can submit thumbs up/down feedback on assistant responses
+
+## Testing and utilities
+
+Backend setup check:
+
 ```bash
 cd backend
-python view_database.py
+python scripts/test_setup.py
+```
+
+Backend tests:
+
+```bash
+cd backend
+pytest tests
 ```
 
 ## Troubleshooting
 
-- **Frontend cannot reach backend**
-  - Ensure backend is running and `NEXT_PUBLIC_API_URL` is correct
-  - Check backend CORS (`ALLOWED_ORIGINS` in `backend/.env`)
-- **Ingestion fails**
-  - Verify `OPENAI_API_KEY` and model names
-  - Ensure PDFs exist in `backend/data/` or Google Docs CSV is valid
+- Frontend cannot reach backend:
+  Confirm the backend is running and `NEXT_PUBLIC_API_URL` is correct.
+- CORS errors:
+  Check backend `ALLOWED_ORIGINS` in `backend/.env`.
+- Ingestion fails:
+  Verify `OPENAI_API_KEY`, document paths, and any Google Docs configuration.
 
 ## License
+
 Bucknell University - OIRA Chatbot Project
