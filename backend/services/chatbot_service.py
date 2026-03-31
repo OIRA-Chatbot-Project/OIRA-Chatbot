@@ -14,7 +14,7 @@ import asyncio
 import os
 import re
 import json
-import config
+from core import config
 from prompts import get_decompose_prompt, get_user_prompt, get_contextualize_prompt, \
     get_question_classifier_prompt, get_conversational_prompt, \
     SYSTEM_PROMPT, CONVERSATIONAL_SYSTEM_PROMPT, CATALOG_SYSTEM_PROMPT, POLICY_SYSTEM_PROMPT

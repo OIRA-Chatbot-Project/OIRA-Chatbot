@@ -12,11 +12,11 @@ import re
 import json
 from datetime import datetime
 
-from database import get_db, SessionLocal, Session as DBSession, User as DBUser, Message as DBMessage, Feedback as DBFeedback
-from models import ChatRequest, ChatResponse, Citation, RegenerateRequest
-from auth import get_current_user, get_user_id_from_token
-from chatbot_service import get_chatbot_service
-import config
+from core.database import get_db, SessionLocal, Session as DBSession, User as DBUser, Message as DBMessage, Feedback as DBFeedback
+from core.models import ChatRequest, ChatResponse, Citation, RegenerateRequest
+from core.auth import get_current_user, get_user_id_from_token
+from services.chatbot_service import get_chatbot_service
+from core import config
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 

@@ -8,9 +8,9 @@ from sqlalchemy.orm import Session
 import json
 from datetime import datetime
 
-from database import get_db, Session as DBSession, User as DBUser, Message as DBMessage, Feedback as DBFeedback
-from models import MessagesResponse, MessageResponse, Citation, EditMessageRequest, EditMessageResponse
-from auth import get_current_user, get_user_id_from_token
+from core.database import get_db, Session as DBSession, User as DBUser, Message as DBMessage, Feedback as DBFeedback
+from core.models import MessagesResponse, MessageResponse, Citation, EditMessageRequest, EditMessageResponse
+from core.auth import get_current_user, get_user_id_from_token
 
 router = APIRouter(prefix="/messages", tags=["messages"])
 

@@ -19,9 +19,9 @@ if sys.platform == "win32":
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-import config
-from database import init_db
-from models import HealthResponse
+from core import config
+from core.database import init_db
+from core.models import HealthResponse
 
 # Import route modules
 from routes import users, sessions, messages, chat, feedback, schedule, admin

@@ -14,7 +14,7 @@ import requests
 from langchain_core.documents import Document
 from markdownify import markdownify as to_markdown
 
-import config
+from core import config
 
 
 _GDOC_ID_RE = re.compile(r"/d/([a-zA-Z0-9_-]+)")

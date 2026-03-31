@@ -6,9 +6,9 @@ This module provides API endpoints for submitting user feedback on assistant res
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from database import get_db, Session as DBSession, User as DBUser, Message as DBMessage, Feedback as DBFeedback
-from models import FeedbackRequest, FeedbackResponse
-from auth import get_current_user, get_user_id_from_token
+from core.database import get_db, Session as DBSession, User as DBUser, Message as DBMessage, Feedback as DBFeedback
+from core.models import FeedbackRequest, FeedbackResponse
+from core.auth import get_current_user, get_user_id_from_token
 
 router = APIRouter(prefix="/feedback", tags=["feedback"])
 

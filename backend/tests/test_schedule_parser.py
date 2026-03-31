@@ -1,6 +1,6 @@
 import unittest
 
-from schedule_parser import parse_schedule_entries
+from services.schedule_parser import parse_schedule_entries
 
 
 class ParseScheduleEntriesTests(unittest.TestCase):

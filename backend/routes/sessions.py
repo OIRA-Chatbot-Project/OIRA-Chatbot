@@ -11,10 +11,10 @@ from sqlalchemy import func
 from pydantic import BaseModel
 from langchain_openai import ChatOpenAI
 
-from database import get_db, Session as DBSession, User as DBUser, Message as DBMessage
-from models import SessionInfo, SessionsResponse
-from auth import get_current_user, get_user_id_from_token
-from config import OPENAI_API_KEY
+from core.database import get_db, Session as DBSession, User as DBUser, Message as DBMessage
+from core.models import SessionInfo, SessionsResponse
+from core.auth import get_current_user, get_user_id_from_token
+from core.config import OPENAI_API_KEY
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 

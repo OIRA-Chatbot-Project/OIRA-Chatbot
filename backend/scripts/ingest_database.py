@@ -6,6 +6,10 @@ generates embeddings, and stores them in a Chroma vector store.
 It handles document classification and metadata extraction.
 """
 
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from uuid import uuid4
 from dotenv import load_dotenv
 from langchain_community.document_loaders import PyPDFDirectoryLoader
@@ -13,9 +17,8 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
 from langchain_openai.embeddings import OpenAIEmbeddings
 from langchain_chroma import Chroma
-from google_docs_loader import load_google_docs
-import config
-import os
+from services.google_docs_loader import load_google_docs
+from core import config
 import re
 
 load_dotenv()

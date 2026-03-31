@@ -5,6 +5,7 @@ Run this after installing dependencies to check if everything is configured corr
 
 import sys
 import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 def test_imports():
     """Test if all required packages can be imported"""
@@ -51,7 +52,7 @@ def test_database():
     """Test if database can be initialized"""
     print("\nTesting database initialization...")
     try:
-        from database import init_db, engine
+        from core.database import init_db, engine
         init_db()
         print("✓ Database initialized successfully")
         
@@ -79,13 +80,13 @@ def test_chroma():
     """Test if ChromaDB can be accessed"""
     print("\nTesting ChromaDB connection...")
     try:
-        import config
+        from core import config
         if not os.path.exists(config.CHROMA_PATH):
             print(f"⚠ ChromaDB directory not found at {config.CHROMA_PATH}")
-            print("   Run 'python ingest_database.py' to create the vector database")
+            print("   Run 'python scripts/ingest_database.py' to create the vector database")
             return False
-        
-        from chatbot_service import chatbot_service
+
+        from services.chatbot_service import chatbot_service
         print(f"✓ ChromaDB connected at {config.CHROMA_PATH}")
         return True
         

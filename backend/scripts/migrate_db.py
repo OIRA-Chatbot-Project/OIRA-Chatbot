@@ -10,8 +10,11 @@ Usage:
 
 A timestamped backup is always created before any changes are made.
 """
-import argparse
+import sys
 import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+import argparse
 import shutil
 import sqlite3
 from datetime import datetime
@@ -44,7 +47,7 @@ def get_orm_schema() -> dict[str, dict[str, str]]:
     Return a mapping of  { table_name: { col_name: sqlite_type } }
     derived from the SQLAlchemy model *metadata* (not the live DB).
     """
-    from database import Base
+    from core.database import Base
 
     schema: dict[str, dict[str, str]] = {}
     for table_name, table_obj in Base.metadata.tables.items():
@@ -85,7 +88,7 @@ def migrate(db_path: str) -> None:
     print(f"[migrate] Backup created: {backup_path}")
 
     # -- Ensure all ORM tables exist first (create_all is a no-op for existing tables)
-    from database import init_db
+    from core.database import init_db
     init_db()
 
     # -- Compare ORM vs live DB ------------------------------------------
@@ -127,7 +130,7 @@ def migrate(db_path: str) -> None:
 
     # -- Print final schema ----------------------------------------------
     from sqlalchemy import inspect as sa_inspect
-    from database import engine
+    from core.database import engine
 
     inspector = sa_inspect(engine)
     print("\n[migrate] Current schema:")
@@ -148,7 +151,7 @@ if __name__ == "__main__":
     if args.db:
         db_path = os.path.abspath(args.db)
     else:
-        from database import DATABASE_URL
+        from core.database import DATABASE_URL
         db_path = DATABASE_URL.replace("sqlite:///", "").replace("sqlite://", "")
         if not os.path.isabs(db_path):
             db_path = os.path.abspath(db_path)

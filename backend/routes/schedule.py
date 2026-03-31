@@ -10,11 +10,11 @@ import re
 import json
 from datetime import datetime
 
-from database import get_db, Session as DBSession, User as DBUser, Message as DBMessage
-from models import ScheduleUploadResponse, Citation, ParsedCourse
-from auth import get_current_user, get_user_id_from_token
-from chatbot_service import get_chatbot_service
-from schedule_parser import extract_text_from_upload, parse_schedule_entries, summarize_schedule
+from core.database import get_db, Session as DBSession, User as DBUser, Message as DBMessage
+from core.models import ScheduleUploadResponse, Citation, ParsedCourse
+from core.auth import get_current_user, get_user_id_from_token
+from services.chatbot_service import get_chatbot_service
+from services.schedule_parser import extract_text_from_upload, parse_schedule_entries, summarize_schedule
 
 router = APIRouter(prefix="/schedule", tags=["schedule"])
 

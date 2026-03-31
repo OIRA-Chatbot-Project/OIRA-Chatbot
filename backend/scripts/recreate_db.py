@@ -3,10 +3,13 @@
 Script to recreate the SQLite database with current models.
 This will backup the old database (if exists) and create a new one.
 """
+import sys
 import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import shutil
 from datetime import datetime
-from database import init_db, DATABASE_URL
+from core.database import init_db, DATABASE_URL
 
 def recreate_database():
     """Recreate the database from scratch"""
@@ -43,7 +46,7 @@ def recreate_database():
 
     # Verify tables were created
     from sqlalchemy import inspect
-    from database import engine
+    from core.database import engine
 
     inspector = inspect(engine)
     tables = inspector.get_table_names()
