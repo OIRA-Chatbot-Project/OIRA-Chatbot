@@ -1,0 +1,3 @@
+class DocumentService:
+    pass    
+

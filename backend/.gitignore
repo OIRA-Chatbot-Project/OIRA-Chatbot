@@ -1,8 +1,0 @@
-# Ignore database and environment files
-chatbot.db
-.env
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-*.sqlite3
