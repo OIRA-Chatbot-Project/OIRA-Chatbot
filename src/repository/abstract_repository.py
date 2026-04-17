@@ -1,18 +1,34 @@
-import abc
-import object
+from __future__ import annotations
+from abc import ABC, abstractmethod
+from typing import Generic, TypeVar
 
-class AbstractRepository(abc.ABC):
-    @abc.abstractmethod
-    def _add(self, obj: object) -> None:
-        """Subclasses must implement this method"""
+EntityT = TypeVar("EntityT")
+IdT = TypeVar("IdT")
+
+class BaseRepository(ABC, Generic[EntityT, IdT]):
+    """Base CRUD contract for repositories in the data layer."""
+
+    @abstractmethod
+    def create(self, entity: EntityT) -> EntityT:
+        """Persist a new entity and return the stored result."""
         raise NotImplementedError
 
-    @abc.abstractmethod
-    def _get(self,  obj: object) -> object:
-        """Subclasses must implement this method"""
+    @abstractmethod
+    def get_by_id(self, entity_id: IdT) -> EntityT | None:
+        """Retrieve one entity by identifier."""
         raise NotImplementedError
 
-    @abc.abstractmethod
-    def __update(self,  obj: object) -> None:
-        """Subclasses must implement this method"""
+    @abstractmethod
+    def update(self, entity: EntityT) -> EntityT:
+        """Persist updates to an existing entity."""
+        raise NotImplementedError
+
+    @abstractmethod
+    def delete(self, entity_id: IdT) -> None:
+        """Delete one entity by identifier."""
+        raise NotImplementedError
+
+    @abstractmethod
+    def list(self, limit: int = 100, offset: int = 0) -> list[EntityT]:
+        """Return a paginated list of entities."""
         raise NotImplementedError
