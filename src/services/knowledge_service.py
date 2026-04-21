@@ -68,3 +68,7 @@ class CitationService:
     """Creates and attaches citations for answer traceability."""
     def build_citations(self, candidates: list[RetrievalCandidate]) -> list[Citation]:
         raise NotImplementedError("TODO: implement CitationService.build_citations")
+
+
+class KnowledgeService(CatalogRetrievalService):
+    """Backward-compatible alias for older knowledge service imports."""

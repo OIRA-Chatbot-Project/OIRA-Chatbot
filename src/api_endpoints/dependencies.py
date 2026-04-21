@@ -1,9 +1,9 @@
 from __future__ import annotations
 from functools import lru_cache
 from src.repository.course_repository import (
-    CatalogDocumentRepository,
     CourseRepository,
     CourseRequirementRepository,
+    DocumentRepository,
 )
 from src.repository.knowledge_repository import CatalogVectorRepository
 from src.repository.message_repository import ChatMessageRepository, ChatSessionRepository
@@ -38,8 +38,14 @@ def get_course_requirement_repository() -> CourseRequirementRepository:
     return CourseRequirementRepository()
 
 @lru_cache
-def get_catalog_document_repository() -> CatalogDocumentRepository:
-    return CatalogDocumentRepository()
+def get_document_repository() -> DocumentRepository:
+    return DocumentRepository()
+
+
+@lru_cache
+def get_catalog_document_repository() -> DocumentRepository:
+    """Backward-compatible dependency alias during repository rename."""
+    return get_document_repository()
 
 @lru_cache
 def get_catalog_vector_repository() -> CatalogVectorRepository:
@@ -117,7 +123,7 @@ def get_chat_history_service() -> ChatHistoryService:
 @lru_cache
 def get_catalog_ingestion_service() -> CatalogIngestionService:
     return CatalogIngestionService(
-        document_repository=get_catalog_document_repository(),
+        document_repository=get_document_repository(),
         course_repository=get_course_repository(),
         vector_repository=get_catalog_vector_repository(),
         unit_of_work=get_unit_of_work(),

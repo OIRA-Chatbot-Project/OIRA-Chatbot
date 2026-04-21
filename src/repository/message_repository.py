@@ -51,3 +51,7 @@ class ChatMessageRepository(BaseRepository[ChatMessageRecord, str]):
         raise NotImplementedError(
             "TODO: implement ChatMessageRepository.list_messages_by_session"
         )
+
+
+class MessageRepository(ChatMessageRepository):
+    """Backward-compatible alias for older message repository imports."""

@@ -1,6 +1,7 @@
 from src.repository.abstract_repository import AbstractRepository, BaseRepository
 from src.repository.course_repository import (
     CatalogDocumentRepository,
+    DocumentRepository,
     CourseRepository,
     CourseRequirementRepository,
 )
@@ -22,6 +23,7 @@ __all__ = [
     "BaseRepository",
     "CourseRepository",
     "CourseRequirementRepository",
+    "DocumentRepository",
     "CatalogDocumentRepository",
     "CatalogVectorRepository",
     "KnowledgeRepository",

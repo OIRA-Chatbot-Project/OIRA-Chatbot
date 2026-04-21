@@ -77,3 +77,7 @@ class ChatHistoryService:
         raise NotImplementedError(
             "TODO: implement ChatHistoryService._update_message_in_transaction"
         )
+
+
+class ChatService(ChatHistoryService):
+    """Backward-compatible alias for older chat service imports."""

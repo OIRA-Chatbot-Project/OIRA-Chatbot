@@ -1,14 +1,14 @@
 from __future__ import annotations
-from src.repository.course_repository import CatalogDocumentRepository, CourseRepository
+from src.repository.course_repository import CourseRepository, DocumentRepository
 from src.repository.knowledge_repository import CatalogVectorRepository
-from src.repository.orm import CatalogDocumentRecord, CourseRecord
+from src.repository.orm import CourseRecord, DocumentRecord
 from src.repository.unit_of_work import UnitOfWork
 
 class CatalogIngestionService:
     """Ingests catalog files and updates structured/vector stores."""
     def __init__(
         self,
-        document_repository: CatalogDocumentRepository,
+        document_repository: DocumentRepository,
         course_repository: CourseRepository,
         vector_repository: CatalogVectorRepository,
         unit_of_work: UnitOfWork,
@@ -25,7 +25,7 @@ class CatalogIngestionService:
         file_name: str,
         content_type: str,
         raw_text: str,
-    ) -> CatalogDocumentRecord:
+    ) -> DocumentRecord:
         with self.unit_of_work:
             return await self._ingest_catalog_document_in_transaction(
                 user_id=user_id,
@@ -45,10 +45,10 @@ class CatalogIngestionService:
             "TODO: implement CatalogIngestionService.index_course_embeddings"
         )
 
-    def get_document(self, document_id: str) -> CatalogDocumentRecord | None:
+    def get_document(self, document_id: str) -> DocumentRecord | None:
         raise NotImplementedError("TODO: implement CatalogIngestionService.get_document")
 
-    def list_user_documents(self, user_id: str) -> list[CatalogDocumentRecord]:
+    def list_user_documents(self, user_id: str) -> list[DocumentRecord]:
         raise NotImplementedError(
             "TODO: implement CatalogIngestionService.list_user_documents"
         )
@@ -68,7 +68,7 @@ class CatalogIngestionService:
         file_name: str,
         content_type: str,
         raw_text: str,
-    ) -> CatalogDocumentRecord:
+    ) -> DocumentRecord:
         raise NotImplementedError(
             "TODO: implement CatalogIngestionService._ingest_catalog_document_in_transaction"
         )
@@ -82,3 +82,7 @@ class CatalogIngestionService:
         raise NotImplementedError(
             "TODO: implement CatalogIngestionService._delete_user_documents_in_transaction"
         )
+
+
+class DocumentService(CatalogIngestionService):
+    """Backward-compatible alias for older service imports."""
