@@ -1,13 +1,27 @@
 from __future__ import annotations
+from langchain_openai import OpenAIEmbeddings
 from src.repository.abstract_repository import BaseRepository
+from langchain_chroma import Chroma
 from src.repository.orm import (
     CatalogChunkRecord, 
     DocumentRecord
 )
 
 
-class KnowledgeRepository(BaseRepository[CatalogChunkRecord, str]):
-    pass
+class ChromaKnowledgeRepository(BaseRepository[CatalogChunkRecord, str]):
+    def __init__(
+        self,
+        *,
+        collection_name: str,
+        embedding_model: str = "text-embedding-3-large",
+        persist_directory: str | None = "./chroma_langchain_db"
+    ) -> None:
+        self._embeddings = OpenAIEmbeddings(model=embedding_model)
+        self._vector_store = Chroma(
+            collection_name=collection_name,
+            embedding_function=self._embeddings,
+            persist_directory=persist_directory,
+        )
 
 
 
