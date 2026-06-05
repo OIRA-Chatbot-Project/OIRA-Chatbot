@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { UserButton, useUser } from '@clerk/nextjs'
+import { UserButton, useUser, useAuth } from '@clerk/nextjs'
 import Image from 'next/image'
 import { SessionSummary, Theme } from '../types'
 import { API_URL } from '../utils/config'
@@ -49,6 +49,7 @@ export default function Sidebar({
   disableNewChat = false,
 }: SidebarProps) {
   useUser()
+  const { getToken } = useAuth()
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [sidebarWidth, setSidebarWidth] = useState(288)
   const isResizing = useRef(false)
@@ -127,7 +128,11 @@ export default function Sidebar({
       await Promise.all(
         sessionsToFetch.map(async session => {
           try {
-            const response = await fetch(`${API_URL}/messages?session_id=${session.id}`)
+            const token = await getToken()
+            if (!token) return
+            const response = await fetch(`${API_URL}/messages?session_id=${session.id}`, {
+              headers: { 'Authorization': `Bearer ${token}` },
+            })
             if (!response.ok) {
               throw new Error('Failed to load conversation')
             }
